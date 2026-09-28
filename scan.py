@@ -8,7 +8,7 @@ BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 MIN_SCORE = 55
 MIN_RR = 1.4
-PORTO = 100_000_000
+PORTO = 50_000_000
 
 def get_tickers():
     with open(TICKER_FILE) as f:
