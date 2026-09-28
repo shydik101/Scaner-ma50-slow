@@ -3,7 +3,10 @@ import os
 import requests
 from datetime import datetime
 
-TICKER_FILE = "data/daytrade-observe-tickers.txt"
+TICKER_FILE = "daytrade-observe-tickers.txt"
+# fallback kalau nanti kamu pindahin ke folder data
+if not os.path.exists(TICKER_FILE):
+    TICKER_FILE = "data/daytrade-observe-tickers.txt"
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 MIN_SCORE = 55
