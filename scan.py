@@ -1,7 +1,7 @@
 import yfinance as yf, pandas as pd, requests, os
 from datetime import datetime
 TOKEN = os.getenv("8824185237:AAH2VLFwOkW-iSpxEQ3u0fIQ-4AS8DnYug0")
-CHAT_ID = os.getenv("7855961885")
+CHAT_ID = os.getenv("109436181")
 tickers = ["BBCA.JK","BBRI.JK","BMRI.JK","BBNI.JK","TLKM.JK","ASII.JK","UNTR.JK","ADRO.JK","AMRT.JK","ICBP.JK","INDF.JK","KLBF.JK","INCO.JK","ANTM.JK","MDKA.JK","PTBA.JK","ITMG.JK","ISAT.JK","SMGR.JK","JSMR.JK","MEDC.JK","BRPT.JK","AKRA.JK","MAPI.JK","MYOR.JK","BBTN.JK","HRUM.JK","BUMI.JK","GOTO.JK","EMTK.JK","CTRA.JK","PWON.JK","BSDE.JK","PGAS.JK","INDY.JK","ELSA.JK","ACES.JK"]
 hasil = []
 for t in tickers:
