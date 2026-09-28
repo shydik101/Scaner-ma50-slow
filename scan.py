@@ -22,8 +22,8 @@ r = requests.get(url_list, timeout=15)
 tickers_raw = [x.strip().upper() for x in r.text.splitlines() if x.strip() and not x.startswith("#")]
 TICKERS = [t if t.endswith(".JK") else t + ".JK" for t in tickers_raw]
 
-hasil_A = [] # Grade A/A+
-hasil_B = [] # Grade B (tengah)
+hasil_A = []
+hasil_B = []
 
 def calc_rsi(s, p=14):
     d = s.diff(); g = (d.where(d > 0, 0)).rolling(p).mean(); l = (-d.where(d < 0, 0)).rolling(p).mean()
@@ -58,13 +58,11 @@ for i,t in enumerate(TICKERS):
 
         score=0; tags=[]
 
-        # FILTER DASAR - SAMA KAYA VERSI SIMPLE KAMU
         if not (close > ma50 and ma50 > ma200 and ma20 > ma50): continue
-        if not (-6 <= jarak <= 4): continue # lebih longgar dikit biar MDKA HRUM masuk
+        if not (-6 <= jarak <= 4): continue
 
-        # SKORING
         score+=20; tags.append("Uptrend")
-        if ma50 > ma50_p10 and ma50_p10 > ma50_p20: score+=15; tags.append("MA50↑")
+        if ma50 > ma50_p10 and ma50_p10 > ma50_p20: score+=15; tags.append("MA50 Naik")
         else: score+=5
         score+=10; tags.append(f"MA50 {jarak:.1f}%")
         
@@ -83,9 +81,8 @@ for i,t in enumerate(TICKERS):
         body=h.iloc[-1].item()-l.iloc[-1].item()
         if body>0 and (close-l.iloc[-1].item())/body > 0.6: score+=5; tags.append("Reject")
 
-        if not is_bull_market: score-=10 # potong cuma 10 di versi tengah, bukan 20
+        if not is_bull_market: score-=10
 
-        # POSITION SIZING
         MODAL=100_000_000; RISIKO_PERSEN=1
         sl=int(close - atr*1.8)
         tp1=int(close + atr*2.5); tp2=int(close + atr*4.5)
@@ -93,10 +90,12 @@ for i,t in enumerate(TICKERS):
         if risiko <=0: continue
         lot=int((MODAL*RISIKO_PERSEN/100)/(risiko*100)); lot=max(1,min(lot,50))
 
-        # GRADE
-        if score >= 85: grade="A+ (85%+)"; hasil_A.append({"ticker":t.replace('.JK',''),"close":int(close),"score":score,"grade":grade,"sl":sl,"tp1":tp1,"tp2":tp2,"lot":lot,"jarak":round(jarak,1),"rsi":int(rsi),"tags":tags})
-        elif score >= 75: grade="A (80%)"; hasil_A.append({"ticker":t.replace('.JK',''),"close":int(close),"score":score,"grade":grade,"sl":sl,"tp1":tp1,"tp2":tp2,"lot":lot,"jarak":round(jarak,1),"rsi":int(rsi),"tags":tags})
-        elif score >= 60: grade="B (70%)"; hasil_B.append({"ticker":t.replace('.JK',''),"close":int(close),"score":score,"grade":grade,"sl":sl,"tp1":tp1,"tp2":tp2,"lot":lot,"jarak":round(jarak,1),"rsi":int(rsi),"tags":tags})
+        if score >= 85:
+            grade="A+ (85%+)"; hasil_A.append({"ticker":t.replace('.JK',''),"close":int(close),"score":score,"grade":grade,"sl":sl,"tp1":tp1,"tp2":tp2,"lot":lot,"jarak":round(jarak,1),"rsi":int(rsi),"tags":tags})
+        elif score >= 75:
+            grade="A (80%)"; hasil_A.append({"ticker":t.replace('.JK',''),"close":int(close),"score":score,"grade":grade,"sl":sl,"tp1":tp1,"tp2":tp2,"lot":lot,"jarak":round(jarak,1),"rsi":int(rsi),"tags":tags})
+        elif score >= 60:
+            grade="B (70%)"; hasil_B.append({"ticker":t.replace('.JK',''),"close":int(close),"score":score,"grade":grade,"sl":sl,"tp1":tp1,"tp2":tp2,"lot":lot,"jarak":round(jarak,1),"rsi":int(rsi),"tags":tags})
 
         if i%100==0: print(f"{i}/{len(TICKERS)} A:{len(hasil_A)} B:{len(hasil_B)}")
         time.sleep(0.05)
@@ -106,17 +105,4 @@ hasil_A=sorted(hasil_A, key=lambda x: x['score'], reverse=True)
 hasil_B=sorted(hasil_B, key=lambda x: x['score'], reverse=True)
 now=datetime.now().strftime('%d %b %H:%M')
 
-if not is_bull_market:
-    pesan=f"⚠️ MARKET FILTER - {now} WIB\nIHSG {int(ihsg_close)} di BAWAH MA50 {int(ihsg_ma50)}\nMarket BEAR - Lot dikurangi 50%\n\n"
-else:
-    pesan=f"✅ SCAN TENGAH A+B - {now} WIB\nIHSG {int(ihsg_close)} Bull ✅\nFull {len(TICKERS)} saham\n\n"
-
-if hasil_A:
-    pesan+=f"💎 GRADE A/A+ (Lot Normal) - {len(hasil_A)} saham:\n"
-    for h in hasil_A[:8]:
-        pesan+=f"\n🔹 {h['ticker']} {h['close']} | {h['grade']} Score {h['score']}\n"
-        pesan+=f"MA50 {h['jarak']}% RSI{h['rsi']} SL {h['sl']} TP1 {h['tp1']} TP2 {h['tp2']}\n"
-        pesan+=f"Lot: {h['lot']} lot | {','.join(h['tags'])}\n"
-
-if hasil_B:
-    pesan+=f"\n🔸 GRADE B (Lot 50% -
+if not is_b
