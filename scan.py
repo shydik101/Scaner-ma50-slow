@@ -6,8 +6,9 @@ from datetime import datetime
 import numpy as np
 yf.set_tz_cache_location("/tmp")
 
-TOKEN = "8824185237:AAH2VLFwOkW-iSpxEQ3u0fIQ-4AS8DnYug0"
-CHAT_ID = "7855961885"
+import os
+TOKEN = os.getenv("TELEGRAM_TOKEN")
+CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 ihsg = yf.download("^JKSE", period="6mo", interval="1d", progress=False, auto_adjust=True, threads=False)
 ihsg_close = ihsg['Close'].iloc[-1].item()
