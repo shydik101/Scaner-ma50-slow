@@ -1,9 +1,8 @@
-name: Scan MA50 Daily
+name: scan
 on:
   schedule:
-    - cron: '10 9 * * 1-5' # jam 16:10 WIB
+    - cron: '10 9 * * 1-5'
   workflow_dispatch:
-
 jobs:
   scan:
     runs-on: ubuntu-latest
@@ -12,8 +11,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install lib
-        run: pip install yfinance pandas requests
+      - run: pip install yfinance pandas requests
       - name: Run full scan
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
