@@ -42,7 +42,7 @@ def get_tickers():
         raw = [x.strip().upper().replace(".JK","") for x in f if x.strip() and not x.startswith('#')]
 
     # BUANG SAHAM DELISTING / BIKIN ERROR
-    BUANG = ["WSKT","WIKA","PTPP","FREN","BWLA","MASA","SMAA","ULPL","BEBS"]
+    BUANG = ["FREN","BWLA","MASA","SMAA","ULPL","BEBS"]
     clean = [t for t in raw if t not in BUANG and len(t)>=4]
     print(f"Total ticker bersih: {len(clean)} (buang {len(raw)-len(clean)} delisting)")
     return [t+".JK" for t in clean]
