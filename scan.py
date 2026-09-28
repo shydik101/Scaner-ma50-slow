@@ -1,4 +1,7 @@
+import warnings
+warnings.filterwarnings("ignore")
 import yfinance as yf, requests, time, json, os
+yf.set_tz_cache_location("/tmp")
 from datetime import datetime
 import numpy as np
 
@@ -46,7 +49,7 @@ def calc_mfi(h,l,c,v,p=14):
 
 for i,t in enumerate(TICKERS):
     try:
-        df = yf.download(t, period="1y", interval="1d", progress=False, auto_adjust=True)
+        df = yf.download(t, period="1y", interval="1d", progress=False, auto_adjust=True, threads=False)
         if len(df) < 200: continue
         c = df['Close']
         h = df['High']; l = df['Low']; o = df['Open']; v = df['Volume']
