@@ -80,8 +80,9 @@ def analyze(df, ticker):
     if c>=h20*0.98: score+=10
     if rr>=MIN_RR: score+=5
 
-    if score>=78: act="STRONG BREAKOUT - BUY CICIL"; star="⭐⭐⭐"
-    elif score>=71: act="BREAKOUT - BUY"; star="⭐⭐"
+    if score>=90: act="SUPER BREAKOUT - ALL IN CICIL"; star="⭐⭐⭐⭐⭐"
+    elif score>=80: act="STRONG BREAKOUT - BUY"; star="⭐⭐⭐⭐"
+    elif score>=70: act="BREAKOUT - BUY TIPIS"; star="⭐⭐⭐"
     elif score>=60: act="WAIT PULLBACK"; star="⭐⭐"
     else: act="SKIP"; star="⭐"
 
