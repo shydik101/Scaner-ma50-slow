@@ -4,61 +4,66 @@ from datetime import datetime
 TOKEN = "8824185237:AAH2VLFwOkW-iSpxEQ3u0fIQ-4AS8DnYug0"
 CHAT_ID = "7855961885"
 
-# LIST LENGKAP SAHAM INDONESIA (LQ45 + IDX80 + LQ45 tambahan)
-# Kalau mau full 900 saham, nanti kita pakai file txt
-TICKERS = [
-"BBCA.JK","BBRI.JK","BMRI.JK","BBNI.JK","BRIS.JK","BNGA.JK","BMAS.JK","BBTN.JK","BBTN.JK","BJBR.JK",
-"TLKM.JK","ISAT.JK","EXCL.JK","TOWR.JK","MTEL.JK",
-"ASII.JK","UNTR.JK","AUTO.JK","DRMA.JK","INKP.JK","TKIM.JK",
-"ADRO.JK","ADMR.JK","PTBA.JK","ITMG.JK","UNVR.JK","ICBP.JK","INDF.JK","KLBF.JK","SIDO.JK",
-"AMRT.JK","MAPI.JK","MAPA.JK","ACES.JK","ERAA.JK",
-"GOTO.JK","BUKA.JK","EMTK.JK","SCMA.JK",
-"ANTM.JK","MDKA.JK","INCO.JK","NCKL.JK","HRUM.JK","BRMS.JK","MBMA.JK",
-"PGAS.JK","MEDC.JK","AKRA.JK","ESSA.JK",
-"CTRA.JK","PWON.JK","BSDE.JK","SMRA.JK","PANI.JK",
-"SMGR.JK","INTP.JK","INDU.JK",
-"TLKM.JK","JSMR.JK","WIKA.JK","PTPP.JK","ADHI.JK",
-"ARTO.JK","BBYB.JK","BRPT.JK","TPIA.JK","CUAN.JK","BREN.JK","AMMN.JK","PGEO.JK"
-]
-# Tips: nanti tambah lagi sampai 200-300 ticker favoritmu
+# AMBIL LIST 957 SAHAM LANGSUNG DARI GITHUB (auto update)
+url_list = "https://raw.githubusercontent.com/budikuatno2-ship-it/auto-cuan/main/data/daytrade-observe-tickers.txt"
+print(f"Download list ticker dari {url_list}")
+try:
+    r = requests.get(url_list, timeout=15)
+    tickers_raw = [x.strip().upper() for x in r.text.splitlines() if x.strip() and not x.startswith("#")]
+    TICKERS = [t if t.endswith(".JK") else t + ".JK" for t in tickers_raw]
+    print(f"Berhasil dapat {len(TICKERS)} ticker")
+except:
+    # fallback kalau gagal download
+    TICKERS = ["BBCA.JK","BBRI.JK","BMRI.JK","BBNI.JK","TLKM.JK","ASII.JK","MDKA.JK","HRUM.JK","ANTM.JK","ADRO.JK"]
 
 hasil = []
 print(f"Mulai scan {len(TICKERS)} saham...")
 
-for t in TICKERS:
+for i, t in enumerate(TICKERS):
     try:
         df = yf.download(t, period="6mo", interval="1d", progress=False, auto_adjust=True)
-        if len(df) < 60: continue
+        if len(df) < 60: 
+            continue
         
         close = df['Close'].iloc[-1].item()
         ma20 = df['Close'].rolling(20).mean().iloc[-1].item()
         ma50 = df['Close'].rolling(50).mean().iloc[-1].item()
-        ma50_prev = df['Close'].rolling(50).mean().iloc[-11].item() # 10 hari lalu
+        ma50_prev = df['Close'].rolling(50).mean().iloc[-11].item()
         vol = df['Volume'].iloc[-1].item()
         vol_avg = df['Volume'].rolling(20).mean().iloc[-1].item()
+        if vol_avg == 0: continue
         
         jarak = ((close - ma50) / ma50) * 100
-        slope_ma50 = ma50 > ma50_prev # MA50 naik?
+        slope_ma50 = ma50 > ma50_prev
 
-        # FILTER KETAT: TREND NAIK + DEKAT MA50
+        # FILTER: TREND NAIK + DEKAT MA50
         is_uptrend = close > ma50 and ma20 > ma50 and slope_ma50
-        is_dekat = -3 <= jarak <= 3
-        is_volume = vol > (vol_avg * 0.8)
+        is_dekat = -4 <= jarak <= 4  # aku longgarkan dikit jadi 4% biar dapat lebih banyak
+        is_volume = vol > (vol_avg * 0.7)
 
         if is_uptrend and is_dekat and is_volume:
-            hasil.append(f"{t.replace('.JK','')} | {int(close)} | MA50 {round(jarak,1)}% | Vol {int(vol/vol_avg*100)}%")
+            hasil.append(f"{t.replace('.JK','')} | {int(close)} | {round(jarak,1)}% | Vol{int(vol/vol_avg*100)}%")
 
-        time.sleep(0.2) # biar tidak di-ban yahoo
-    except Exception as e:
+        if i % 50 == 0:
+            print(f"Progress {i}/{len(TICKERS)} -> ketemu {len(hasil)}")
+        time.sleep(0.15)
+    except:
         continue
 
 now = datetime.now().strftime('%d %b %H:%M')
+# Telegram batasi 4096 karakter, kita potong jadi 2 pesan kalau banyak
 if hasil:
-    pesan = f"🔥 SCANNER IDX TREND NAIK x MA50 - {now} WIB\nDitemukan {len(hasil)} saham:\n\n" + "\n".join(hasil[:30])
-    pesan += f"\n\nScreener: Close>MA50, MA20>MA50, MA50 Naik, Jarak -3% s/d +3%"
+    header = f"🔥 FULL SCAN 957 IDX - {now} WIB\nTrend Naik x Dekat MA50\nDitemukan {len(hasil)} saham:\n\n"
+    pesan1 = header + "\n".join(hasil[:35])
+    print(pesan1)
+    requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", data={"chat_id": CHAT_ID, "text": pesan1})
+    
+    # kalau lebih dari 35, kirim pesan ke-2
+    if len(hasil) > 35:
+        time.sleep(1)
+        pesan2 = f"Lanjutan ({len(hasil)-35} saham lagi):\n\n" + "\n".join(hasil[35:70])
+        requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", data={"chat_id": CHAT_ID, "text": pesan2})
 else:
-    pesan = f"⚠️ SCAN {now} WIB\nTidak ada saham uptrend yang dekat MA50 hari ini.\nMarket lagi jauh di atas / di bawah MA50. HOLD CASH."
-
-print(pesan)
-r = requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", data={"chat_id": CHAT_ID, "text": pesan})
-print(f"TELEGRAM: {r.text}")
+    pesan = f"⚠️ FULL SCAN 957 - {now} WIB\nTidak ada saham uptrend dekat MA50 hari ini."
+    print(pesan)
+    requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", data={"chat_id": CHAT_ID, "text": pesan})
