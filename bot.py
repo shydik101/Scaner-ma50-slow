@@ -4,12 +4,29 @@ from datetime import datetime
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 MY_CHAT_ID = str(os.getenv("TELEGRAM_CHAT_ID"))
 PORT_FILE = "portfolio.json"
+TICKER_FILE = "daytrade-observe-tickers.txt"
 
 def load_porto():
     if not os.path.exists(PORT_FILE): return {}
     try: return json.loads(open(PORT_FILE).read())
     except: return {}
 def save_porto(d): open(PORT_FILE,"w").write(json.dumps(d,indent=2))
+
+def load_tickers():
+    # 1. Coba baca file lokal kamu yang di repo
+    try:
+        if os.path.exists(TICKER_FILE):
+            with open(TICKER_FILE) as f:
+                data = [x.strip() for x in f if x.strip() and not x.startswith("#")]
+                if data: 
+                    print(f"Load {len(data)} ticker dari {TICKER_FILE}")
+                    return data[:81]
+    except Exception as e:
+        print(f"Gagal baca {TICKER_FILE}: {e}")
+
+    # 2. Fallback kalau file lokal tidak ada -> pakai list LQ45
+    print("Fallback pakai LQ45 default")
+    return ["BBCA.JK","BBRI.JK","BMRI.JK","BBNI.JK","TLKM.JK","ASII.JK","UNTR.JK","ADRO.JK","AMRT.JK","ICBP.JK","INDF.JK","KLBF.JK","BBCA.JK"]
 
 def scan_one(ticker):
     t = ticker.upper().strip().replace(".JK","") + ".JK"
@@ -41,42 +58,41 @@ def format_scan(h):
             f"R:R 1:{h['rr']} | Money: max Rp 1.5jt")
 
 def send(chat,text):
-    requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", data={"chat_id":chat,"text":text})
+    try:
+        requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", data={"chat_id":chat,"text":text}, timeout=15)
+    except Exception as e:
+        print(f"Gagal kirim: {e}")
 
-# === MESIN 1: AUTO SCAN JAM 15:10 WIB ===
+# === AUTO SCAN 15:10 WIB ===
 def auto_scan_loop():
     while True:
-        now = datetime.now() # Railway pakai WIB kalau di set TZ
-        # 15:10 WIB Senin-Jumat
+        now = datetime.now()
         if now.hour == 15 and now.minute == 10 and now.weekday() < 5:
             try:
-                send(MY_CHAT_ID, "⏳ AUTO SCAN SORE 15:10 Jalan...")
-                # pakai file lokal yang ada di repo kamu
-try:
-    with open("daytrade-observe-tickers.txt") as f:
-        tickers = [x.strip() for x in f if x.strip() and not x.startswith("#")][:81]
-except:
-    tickers = ["BBCA.JK","BBRI.JK","BMRI.JK","TLKM.JK","ASII.JK"]
+                tickers = load_tickers()
+                send(MY_CHAT_ID, f"⏳ AUTO SCAN 15:10 Jalan... scan {len(tickers)} saham dari {TICKER_FILE}")
                 hasil=[]
                 for t in tickers:
                     h = scan_one(t)
                     if h and h['score']>=65: hasil.append(h)
+                    time.sleep(0.2)
                 hasil = sorted(hasil, key=lambda x: x['score'], reverse=True)[:5]
                 if not hasil:
-                    send(MY_CHAT_ID, f"🔥 SCAN SULTAN LITE - {now.strftime('%d Sep %H:%M')} WIB\nHari ini tidak ada yang lolos 65+. Pasar lagi sepi, HOLD CASH.")
+                    send(MY_CHAT_ID, f"🔥 SCAN SULTAN LITE - {now.strftime('%d %b %H:%M')} WIB\nFull {len(tickers)} saham\nTidak ada yang lolos 65+ hari ini. HOLD CASH.")
                 else:
-                    pesan = f"🔥 SCAN SULTAN LITE - {now.strftime('%d Sep %H:%M')} WIB | {len(tickers)} saham\nTop 5 layak pantau:\n\n"
+                    pesan = f"🔥 SCAN SULTAN LITE - {now.strftime('%d %b %H:%M')} WIB | {len(tickers)} saham\nTop 5 layak pantau:\n\n"
                     for i,h in enumerate(hasil,1): pesan += f"#{i} {format_scan(h)}\n\n"
                     pesan += "📌 Cek malam santai, entry besok pagi."
                     send(MY_CHAT_ID, pesan)
-                time.sleep(61) # biar gak double kirim
+                time.sleep(70)
             except Exception as e:
                 send(MY_CHAT_ID, f"Auto scan error: {e}")
         time.sleep(30)
 
-# === MESIN 2: COMMAND MANUAL ===
+# === COMMAND MANUAL ===
 def command_loop():
     offset=0
+    print("🤖 SULTAN PRO AKTIF - baca file lokal")
     while True:
         try:
             r = requests.get(f"https://api.telegram.org/bot{TOKEN}/getUpdates?offset={offset}&timeout=30", timeout=35).json()
@@ -86,44 +102,4 @@ def command_loop():
                 if chat_id!=MY_CHAT_ID: continue
 
                 if text.startswith("/start"):
-                    send(chat_id,"🔥 SULTAN PRO AUTO+MANUAL AKTIF\n\nAUTO: Tiap 15:10 WIB kirim Top 5\nMANUAL:\n/scan CUAN TLKM - scan bebas\n/buy CUAN 885 10\n/sell CUAN\n/portfolio")
-
-                elif text.startswith("/scan"):
-                    tickers=text.replace("/scan","").strip().split()
-                    if not tickers: send(chat_id,"Contoh: /scan CUAN TLKM"); continue
-                    for tk in tickers[:10]:
-                        h=scan_one(tk)
-                        send(chat_id, format_scan(h) if h else f"❌ {tk} gagal")
-
-                elif text.startswith("/buy"):
-                    try:
-                        _,ticker,harga,lot=text.split()
-                        porto=load_porto(); porto[ticker.upper()]={"harga":int(harga),"lot":int(lot),"tgl":datetime.now().strftime("%d-%m")}
-                        save_porto(porto); send(chat_id,f"✅ BUY {ticker.upper()} {lot} lot @ {harga}")
-                    except: send(chat_id,"Format: /buy CUAN 885 10")
-
-                elif text.startswith("/sell"):
-                    try:
-                        _,ticker=text.split()
-                        porto=load_porto()
-                        if ticker.upper() in porto: del porto[ticker.upper()]; save_porto(porto); send(chat_id,f"✅ {ticker.upper()} terjual")
-                        else: send(chat_id,"Tidak ada di porto")
-                    except: send(chat_id,"Format: /sell CUAN")
-
-                elif text.startswith("/portfolio"):
-                    porto=load_porto()
-                    if not porto: send(chat_id,"📭 Porto kosong"); continue
-                    reply=f"💼 PORTO - {datetime.now().strftime('%d Sep %H:%M')}\n\n"
-                    for t,d in porto.items():
-                        h=scan_one(t)
-                        if not h: continue
-                        pl=(h['close']-d['harga'])/d['harga']*100
-                        reply+=f"{'🟢' if pl>0 else '🔴'} {t} {d['lot']} lot | {d['harga']}->{h['close']} ({pl:+.1f}%)\nSL:{h['sl']} TP1:{h['tp1']}\n\n"
-                    send(chat_id,reply)
-        except Exception as e:
-            print(e); time.sleep(5)
-
-# JALANKAN DUA MESIN BARENGAN
-if __name__ == "__main__":
-    threading.Thread(target=auto_scan_loop, daemon=True).start()
-    command_loop()
+                    send(chat_id,"🔥 SULTAN PRO AUTO+MANUAL\nFile
