@@ -1,5 +1,5 @@
 import yfinance as yf
-import requests, os, time, json, numpy as np
+import requests, os, time, json, numpy as np, random
 from datetime import datetime, date
 
 TOKEN = os.getenv("TELEGRAM_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")
@@ -26,12 +26,30 @@ def load_history():
 def save_history(h):
     with open(HISTORY_FILE,'w') as f: json.dump(h,f)
 
+def get_data(ticker):
+    """V6.2 ANTI-BLOCK: retry 3x dengan 2 method"""
+    for attempt in range(3):
+        try:
+            df = yf.download(ticker, period="3mo", interval="1d", progress=False, auto_adjust=True, threads=False)
+            if len(df) >= 30:
+                return df
+        except: pass
+        try:
+            time.sleep(1 + attempt)
+            tk = yf.Ticker(ticker)
+            df2 = tk.history(period="3mo", interval="1d", auto_adjust=True)
+            if len(df2) >= 30:
+                return df2
+        except: pass
+        time.sleep(2 + attempt*2 + random.uniform(0,1))
+    return None
+
 def scan_one(ticker):
     try:
         t=ticker.upper().strip()
         if not t.endswith(".JK"): t+=".JK"
-        df = yf.download(t, period="3mo", interval="1d", progress=False, auto_adjust=True)
-        if len(df)<30:
+        df = get_data(t)
+        if df is None or len(df)<30:
             return None
         c=float(df['Close'].iloc[-1]); o=float(df['Open'].iloc[-1])
         vol=float(df['Volume'].iloc[-1])
@@ -89,11 +107,8 @@ def scan_one(ticker):
         entry_low=int(c*0.995); entry_high=int(c*1.005)
         lot=int(MODAL/c/100) if c>0 else 0
         notes=[]
-        if vol_r>=1.2: notes.append(f"Volume valid {vol_r:.1f}x")
-        if trend_ma20>1: notes.append(f"MA20 nanjak +{trend_ma20:.1f}%")
-        try:
-            if c>=float(df['High'].rolling(20).max().iloc[-1])*0.98: notes.append("close dekat high 20hr")
-        except: pass
+        if vol_r>=1.2: notes.append(f"Vol valid {vol_r:.1f}x")
+        if trend_ma20>1: notes.append(f"MA20 +{trend_ma20:.1f}%")
         if macd_bull: notes.append("MACD bull")
 
         return {"ticker":t.replace(".JK",""), "close":int(c), "ma20":int(ma20), "vol":vol_r, "trend":trend_ma20,
@@ -107,10 +122,14 @@ def scan_one(ticker):
 tickers=load_tickers()
 history=load_history()
 hasil=[]
-for tk in tickers:
+failed=0
+for i, tk in enumerate(tickers):
     h=scan_one(tk)
     if h: hasil.append(h)
-    time.sleep(0.12)
+    else: failed+=1
+    time.sleep(0.8 + random.uniform(0,0.5))
+    if i % 10 == 0 and i>0:
+        time.sleep(3)
 
 hasil=sorted(hasil, key=lambda x: x['score'], reverse=True)
 today_str = str(date.today())
@@ -133,16 +152,13 @@ now=datetime.now().strftime('%d %b %H:%M')
 if not layak_tampil:
     if hasil:
         fallback = sorted(hasil, key=lambda x: x['score'], reverse=True)[:5]
-        pesan=f"🔥 SCAN SULTAN LITE {now} | {len(tickers)} saham\nTop Bintang 3-5: Pasar merah, tidak ada bintang 3-5 hari ini.\nDari {len(tickers)} saham, lolos filter minimal: {len(hasil)} saham.\nFallback Top 5 bintang 1-2 (pantau dulu):\n\n"
+        pesan=f"🔥 SCAN SULTAN LITE {now} | {len(tickers)} saham\nTop Bintang 3-5: Pasar merah, tidak ada bintang 3-5 hari ini.\nDari {len(tickers)} saham, lolos minimal: {len(hasil)} saham. Gagal download: {failed}\nFallback Top 5 bintang 1-2:\n\n"
         for i,h in enumerate(fallback,1):
-            streak = get_streak(h['ticker'])
-            tag = f" {streak} hari" if streak>=2 else ""
-            pesan+=f"#{i} {h['ticker']}.JK {h['score']} - {h['status']} {h['bintang']}{tag}\n"
-            pesan+=f" Harga:{h['close']} | MA20:{h['ma20']} | Vol:{h['vol']:.1f}x | RSI:{h['rsi']} ADX:{h['adx']}\n\n"
+            pesan+=f"#{i} {h['ticker']}.JK {h['score']} - {h['status']} {h['bintang']}\n Harga:{h['close']} | MA20:{h['ma20']} | Vol:{h['vol']:.1f}x | RSI:{h['rsi']} ADX:{h['adx']}\n\n"
     else:
-        pesan=f"🔥 SCAN SULTAN LITE {now} | {len(tickers)} saham\nTop Bintang 3-5:\n\nYahoo Finance lagi limit / market libur. Dari {len(tickers)} ticker tidak ada data yang ke-download. Coba run ulang 5 menit lagi.\nTotal ter-scan: {len(tickers)} saham."
+        pesan=f"🔥 SCAN SULTAN LITE {now} | {len(tickers)} saham\nTop Bintang 3-5:\n\nYahoo Finance lagi limit / market libur. Dari {len(tickers)} ticker tidak ada data yang ke-download (gagal: {failed}). Coba run ulang 10 menit lagi.\nTotal ter-scan: {len(tickers)} saham. V6.2 sudah pakai retry 3x."
 else:
-    pesan=f"🔥 SCAN SULTAN LITE {now} | {len(tickers)} saham\nTop {len(top_tampil)} Bintang 3-5 layak pantau:\n\n"
+    pesan=f"🔥 SCAN SULTAN LITE {now} | {len(tickers)} saham\nTop {len(top_tampil)} Bintang 3-5 layak pantau (lolos: {len(hasil)}, gagal: {failed}):\n\n"
     for i,h in enumerate(top_tampil,1):
         streak = get_streak(h['ticker'])
         if streak>=3: action = f"🔥🔥🔥 {streak} HARI BERTURUT! SUPER TREND - WAJIB HOLD"
