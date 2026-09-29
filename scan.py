@@ -64,16 +64,13 @@ def fetch_via_stooq(ticker):
     return None
 
 def get_data_triple(ticker):
-    for attempt in range(2):
-        try:
-            df = yf.download(ticker, period="3mo", interval="1d", progress=False, auto_adjust=True, threads=False)
-            if len(df) >= 30: return df, "yfinance"
-        except: pass
-        time.sleep(1+attempt)
-    for attempt in range(2):
-        df = fetch_via_yahoo_api(ticker)
-        if df is not None and len(df) >= 30: return df, "yahoo_api"
-        time.sleep(1)
+    """V6.3b NO RETRY: 1x coba per source saja"""
+    try:
+        df = yf.download(ticker, period="3mo", interval="1d", progress=False, auto_adjust=True, threads=False)
+        if len(df) >= 30: return df, "yfinance"
+    except: pass
+    df = fetch_via_yahoo_api(ticker)
+    if df is not None and len(df) >= 30: return df, "yahoo_api"
     df = fetch_via_stooq(ticker)
     if df is not None and len(df) >= 30: return df, "stooq"
     return None, "failed"
@@ -93,10 +90,12 @@ def scan_one(ticker):
         ma20_5ago=float(df['Close'].rolling(20).mean().shift(5).iloc[-1]) if len(df)>=25 else ma20
         trend_ma20=(ma20/ma20_5ago-1)*100 if ma20_5ago else 0
         ema9=float(df['Close'].ewm(span=9).mean().iloc[-1]); ema21=float(df['Close'].ewm(span=21).mean().iloc[-1])
-        rsi14=float(rsi(df['Close']).iloc[-1]) if len(df)>=15 else 50
+        try: rsi14=float(rsi(df['Close']).iloc[-1])
+        except: rsi14=50
         ema12=df['Close'].ewm(span=12).mean(); ema26=df['Close'].ewm(span=26).mean()
         macd=ema12-ema26; signal=macd.ewm(span=9).mean()
-        macd_bull = float(macd.iloc[-1]) > float(signal.iloc[-1])
+        try: macd_bull = float(macd.iloc[-1]) > float(signal.iloc[-1])
+        except: macd_bull=False
         tr=np.maximum(df['High']-df['Low'], np.maximum(abs(df['High']-df['Close'].shift(1)), abs(df['Low']-df['Close'].shift(1))))
         atr=float(tr.rolling(14).mean().iloc[-1]) if len(tr)>=14 else float(tr.mean())
         try:
@@ -148,8 +147,8 @@ for i, tk in enumerate(tickers):
         stats[src]=stats.get(src,0)+1
     else:
         stats["failed"]+=1
-    time.sleep(0.6 + random.uniform(0,0.4))
-    if i % 15 == 0 and i>0: time.sleep(2)
+    time.sleep(0.5 + random.uniform(0,0.3))
+    if i % 20 == 0 and i>0: time.sleep(2)
 
 hasil=sorted(hasil, key=lambda x: x['score'], reverse=True)
 today_str = str(date.today())
@@ -173,13 +172,13 @@ source_info = f"yfinance:{stats.get('yfinance',0)} yahoo_api:{stats.get('yahoo_a
 if not layak_tampil:
     if hasil:
         fallback = sorted(hasil, key=lambda x: x['score'], reverse=True)[:5]
-        pesan=f"🔥 SCAN SULTAN LITE V6.3 {now} | {len(tickers)} saham\n[{source_info}]\nTop Bintang 3-5: Pasar merah, tidak ada bintang 3-5. Lolos minimal: {len(hasil)}\nFallback Top 5:\n\n"
+        pesan=f"🔥 SCAN SULTAN LITE V6.3b {now} | {len(tickers)} saham\n[{source_info}]\nTop Bintang 3-5: Pasar merah, tidak ada bintang 3-5. Lolos minimal: {len(hasil)}\nFallback Top 5:\n\n"
         for i,h in enumerate(fallback,1):
             pesan+=f"#{i} {h['ticker']}.JK {h['score']} - {h['status']} {h['bintang']} [{h['source']}]\n Harga:{h['close']} | Vol:{h['vol']:.1f}x | RSI:{h['rsi']} ADX:{h['adx']}\n\n"
     else:
-        pesan=f"🔥 SCAN SULTAN LITE V6.3 {now} | {len(tickers)} saham\n[{source_info}]\n\nTRIPLE SOURCE GAGAL SEMUA! Yahoo + Stooq kena block. Coba run ulang 15 menit lagi.\nTotal ter-scan: {len(tickers)} saham."
+        pesan=f"🔥 SCAN SULTAN LITE V6.3b {now} | {len(tickers)} saham\n[{source_info}]\n\nTRIPLE SOURCE GAGAL SEMUA! Coba run ulang 10 menit lagi.\nTotal ter-scan: {len(tickers)} saham. V6.3b NO-RETRY."
 else:
-    pesan=f"🔥 SCAN SULTAN LITE V6.3 {now} | {len(tickers)} saham\n[{source_info}]\nTop {len(top_tampil)} Bintang 3-5 layak pantau (lolos: {len(hasil)}):\n\n"
+    pesan=f"🔥 SCAN SULTAN LITE V6.3b {now} | {len(tickers)} saham\n[{source_info}]\nTop {len(top_tampil)} Bintang 3-5 layak pantau (lolos: {len(hasil)}):\n\n"
     for i,h in enumerate(top_tampil,1):
         streak = get_streak(h['ticker'])
         if streak>=3: action = f"🔥🔥🔥 {streak} HARI BERTURUT! SUPER TREND"
