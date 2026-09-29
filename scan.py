@@ -5,19 +5,28 @@ import pandas as pd
 
 TOKEN = os.getenv("TELEGRAM_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-MODAL = 1500000
+MODAL = 5000000
 HISTORY_FILE = "history_top.json"
+
+# === FITUR BARU BATCH ===
+TICKER_FILE = os.getenv("TICKER_FILE", "daytrade-observe-tickers.txt")
+BATCH_LABEL = os.getenv("BATCH_LABEL", "SCAN")
 
 def rsi(s, p=14):
     d=s.diff(); g=d.where(d>0,0).rolling(p).mean(); l=-d.where(d<0,0).rolling(p).mean()
     rs=g/l; return 100-(100/(1+rs))
 
 def load_tickers():
-    try:
-        with open("daytrade-observe-tickers.txt") as f:
-            t=[x.strip() for x in f if x.strip() and not x.startswith("#")]
-            if t: return t
-    except: pass
+    for fname in [TICKER_FILE, "daytrade-observe-tickers.txt", "tickers-batch1.txt", "tickers-batch2.txt"]:
+        try:
+            with open(fname) as f:
+                t=[x.strip() for x in f if x.strip() and not x.startswith("#")]
+                if t:
+                    t=[x.upper() if x.upper().endswith(".JK") else f"{x.upper()}.JK" for x in t]
+                    t=list(dict.fromkeys(t))
+                    print(f"{BATCH_LABEL} Load {len(t)} from {fname}")
+                    return t
+        except: pass
     return ["BBCA.JK","BBRI.JK","BMRI.JK","BBNI.JK","TLKM.JK","ASII.JK","UNTR.JK","CUAN.JK","GOTO.JK","BREN.JK","BRPT.JK"]
 
 def load_history():
@@ -82,6 +91,10 @@ def scan_one(ticker):
         df, source = get_data_triple(t)
         if df is None or len(df)<30: return None, source
         c=float(df['Close'].iloc[-1]); o=float(df['Open'].iloc[-1])
+
+        # === UPDATE MODAL 5JT ===
+        if c < 50 or c > 10000: return None, source
+
         vol=float(df['Volume'].iloc[-1])
         vol_avg=float(df['Volume'].rolling(20).mean().iloc[-1]) if len(df)>=20 else vol
         vol_r=vol/vol_avg if vol_avg>0 else 0
@@ -146,7 +159,10 @@ for i, tk in enumerate(tickers):
         hasil.append(h)
         stats[src]=stats.get(src,0)+1
     else:
-        stats["failed"]+=1
+        if src in stats:
+            stats[src]=stats.get(src,0)+1
+        else:
+            stats["failed"]+=1
     time.sleep(0.5 + random.uniform(0,0.3))
     if i % 20 == 0 and i>0: time.sleep(2)
 
@@ -166,19 +182,21 @@ def get_streak(ticker):
 
 layak_tampil = [h for h in hasil if h['bintang_num'] >= 3]
 top_tampil = layak_tampil[:10] if len(layak_tampil) > 10 else layak_tampil
-now=datetime.now().strftime('%d %b %H:%M')
+import pytz
+wib = pytz.timezone("Asia/Jakarta")
+now=wib.localize(datetime.now()).strftime('%d %b %H:%M') if False else datetime.now(pytz.timezone("Asia/Jakarta")).strftime('%d %b %H:%M WIB')
 source_info = f"yfinance:{stats.get('yfinance',0)} yahoo_api:{stats.get('yahoo_api',0)} stooq:{stats.get('stooq',0)} fail:{stats.get('failed',0)}"
 
 if not layak_tampil:
     if hasil:
         fallback = sorted(hasil, key=lambda x: x['score'], reverse=True)[:5]
-        pesan=f"🔥 SCAN SULTAN LITE V6.3b {now} | {len(tickers)} saham\n[{source_info}]\nTop Bintang 3-5: Pasar merah, tidak ada bintang 3-5. Lolos minimal: {len(hasil)}\nFallback Top 5:\n\n"
+        pesan=f"🔥 {BATCH_LABEL} V6.3b 5JT {now} | {len(tickers)} saham\n[{source_info}]\nTop Bintang 3-5: Pasar merah, tidak ada bintang 3-5. Lolos minimal: {len(hasil)}\nFallback Top 5:\n\n"
         for i,h in enumerate(fallback,1):
-            pesan+=f"#{i} {h['ticker']}.JK {h['score']} - {h['status']} {h['bintang']} [{h['source']}]\n Harga:{h['close']} | Vol:{h['vol']:.1f}x | RSI:{h['rsi']} ADX:{h['adx']}\n\n"
+            pesan+=f"#{i} {h['ticker']}.JK {h['score']} - {h['status']} {h['bintang']} [{h['source']}]\n Harga:{h['close']} | Vol:{h['vol']:.1f}x | RSI:{h['rsi']} ADX:{h['adx']} | Lot {h['lot']}\n\n"
     else:
-        pesan=f"🔥 SCAN SULTAN LITE V6.3b {now} | {len(tickers)} saham\n[{source_info}]\n\nTRIPLE SOURCE GAGAL SEMUA! Coba run ulang 10 menit lagi.\nTotal ter-scan: {len(tickers)} saham. V6.3b NO-RETRY."
+        pesan=f"🔥 {BATCH_LABEL} V6.3b 5JT {now} | {len(tickers)} saham\n[{source_info}]\n\nTRIPLE SOURCE GAGAL SEMUA! Coba run ulang 10 menit lagi.\nTotal ter-scan: {len(tickers)} saham."
 else:
-    pesan=f"🔥 SCAN SULTAN LITE V6.3b {now} | {len(tickers)} saham\n[{source_info}]\nTop {len(top_tampil)} Bintang 3-5 layak pantau (lolos: {len(hasil)}):\n\n"
+    pesan=f"🔥 {BATCH_LABEL} V6.3b 5JT {now} | {len(tickers)} saham\n[{source_info}]\nTop {len(top_tampil)} Bintang 3-5 layak pantau (lolos: {len(hasil)}):\n\n"
     for i,h in enumerate(top_tampil,1):
         streak = get_streak(h['ticker'])
         if streak>=3: action = f"🔥🔥🔥 {streak} HARI BERTURUT! SUPER TREND"
@@ -186,7 +204,7 @@ else:
         else:
             if h['bintang_num']==5: action="✅ Baru muncul, momentum awal - BUY"
             else: action="👀 Baru muncul, cicil"
-        pesan+=f"#{i} {h['ticker']}.JK {h['score']} - {h['status']} {h['bintang']}\n Harga:{h['close']} | MA20:{h['ma20']} | Vol:{h['vol']:.1f}x | Trend:{h['trend']:+.1f}% | [{h['source']}]\n RSI:{h['rsi']} ADX:{h['adx']} MACD:{'BULL' if h['macd_bull'] else 'WAIT'}\n Entry:{h['entry_low']}-{h['entry_high']} | SL:{h['sl']} ({h['sl_pct']}%) | TP1:{h['tp1']} TP2:{h['tp2']}\n R:R 1:{h['rr']} | ~{h['lot']} lot | {h['notes']}\n {action}\n\n"
+        pesan+=f"#{i} {h['ticker']}.JK {h['score']} - {h['status']} {h['bintang']}\n Harga:{h['close']} | MA20:{h['ma20']} | Vol:{h['vol']:.1f}x | Trend:{h['trend']:+.1f}% | [{h['source']}] Lot {h['lot']}\n RSI:{h['rsi']} ADX:{h['adx']} MACD:{'BULL' if h['macd_bull'] else 'WAIT'}\n Entry:{h['entry_low']}-{h['entry_high']} | SL:{h['sl']} ({h['sl_pct']}%) | TP1:{h['tp1']} TP2:{h['tp2']}\n R:R 1:{h['rr']} | {h['notes']}\n {action}\n\n"
 
 print(pesan)
 if TOKEN and CHAT_ID:
