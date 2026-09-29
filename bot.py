@@ -51,8 +51,12 @@ def auto_scan_loop():
         if now.hour == 15 and now.minute == 10 and now.weekday() < 5:
             try:
                 send(MY_CHAT_ID, "⏳ AUTO SCAN SORE 15:10 Jalan...")
-                url_list = "https://raw.githubusercontent.com/budikuatno2-ship-it/auto-cuan/main/data/daytrade-observe-tickers.txt"
-                tickers = [x.strip() for x in requests.get(url_list, timeout=15).text.splitlines() if x.strip()][:81]
+                # pakai file lokal yang ada di repo kamu
+try:
+    with open("daytrade-observe-tickers.txt") as f:
+        tickers = [x.strip() for x in f if x.strip() and not x.startswith("#")][:81]
+except:
+    tickers = ["BBCA.JK","BBRI.JK","BMRI.JK","TLKM.JK","ASII.JK"]
                 hasil=[]
                 for t in tickers:
                     h = scan_one(t)
