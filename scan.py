@@ -30,27 +30,33 @@ def scan_one(ticker):
     try:
         t=ticker.upper().strip()
         if not t.endswith(".JK"): t+=".JK"
-        df = yf.download(t, period="1y", interval="1d", progress=False, auto_adjust=True)
-        if len(df)<100: return None
+        df = yf.download(t, period="3mo", interval="1d", progress=False, auto_adjust=True)
+        if len(df)<30:
+            return None
         c=float(df['Close'].iloc[-1]); o=float(df['Open'].iloc[-1])
-        vol=float(df['Volume'].iloc[-1]); vol_avg=float(df['Volume'].rolling(20).mean().iloc[-1])
+        vol=float(df['Volume'].iloc[-1])
+        vol_avg=float(df['Volume'].rolling(20).mean().iloc[-1]) if len(df)>=20 else vol
         vol_r=vol/vol_avg if vol_avg>0 else 0
-        ma20=float(df['Close'].rolling(20).mean().iloc[-1]); ma50=float(df['Close'].rolling(50).mean().iloc[-1])
-        ma20_5ago=float(df['Close'].rolling(20).mean().shift(5).iloc[-1])
+        ma20=float(df['Close'].rolling(20).mean().iloc[-1]) if len(df)>=20 else c
+        ma50=float(df['Close'].rolling(50).mean().iloc[-1]) if len(df)>=50 else c
+        ma20_5ago=float(df['Close'].rolling(20).mean().shift(5).iloc[-1]) if len(df)>=25 else ma20
         trend_ma20=(ma20/ma20_5ago-1)*100 if ma20_5ago else 0
         ema9=float(df['Close'].ewm(span=9).mean().iloc[-1]); ema21=float(df['Close'].ewm(span=21).mean().iloc[-1])
-        rsi14=float(rsi(df['Close']).iloc[-1])
+        rsi14=float(rsi(df['Close']).iloc[-1]) if len(df)>=15 else 50
         ema12=df['Close'].ewm(span=12).mean(); ema26=df['Close'].ewm(span=26).mean()
         macd=ema12-ema26; signal=macd.ewm(span=9).mean()
         macd_bull = float(macd.iloc[-1]) > float(signal.iloc[-1])
         tr=np.maximum(df['High']-df['Low'], np.maximum(abs(df['High']-df['Close'].shift(1)), abs(df['Low']-df['Close'].shift(1))))
-        atr=float(tr.rolling(14).mean().iloc[-1])
+        atr=float(tr.rolling(14).mean().iloc[-1]) if len(tr)>=14 else float(tr.mean())
         plus_dm=df['High'].diff(); minus_dm=-df['Low'].diff()
         plus_dm[plus_dm<0]=0; minus_dm[minus_dm<0]=0
         atr2=tr.rolling(14).mean()
-        plus_di=100*(plus_dm.ewm(alpha=1/14).mean()/atr2); minus_di=100*(minus_dm.ewm(alpha=1/14).mean()/atr2)
-        dx=100*abs(plus_di-minus_di)/(plus_di+minus_di)
-        adx_val=float(dx.rolling(14).mean().iloc[-1])
+        try:
+            plus_di=100*(plus_dm.ewm(alpha=1/14).mean()/atr2); minus_di=100*(minus_dm.ewm(alpha=1/14).mean()/atr2)
+            dx=100*abs(plus_di-minus_di)/(plus_di+minus_di)
+            adx_val=float(dx.rolling(14).mean().iloc[-1])
+        except:
+            adx_val=15
 
         score=0
         if ema9>ema21: score+=15
@@ -60,21 +66,19 @@ def scan_one(ticker):
         if vol_r>=1.5: score+=5
         if 35<=rsi14<=80: score+=15
         if macd_bull: score+=10
-        if adx_val>=15: score+=10
+        if adx_val>=12: score+=10
         if c>o: score+=10
+        if rsi14>88: score-=15
+        if adx_val<10: score-=10
+        if score<25: return None
 
-        if adx_val<10: return None
-        if rsi14>88: return None
-        if score<40: return None
-
-        # === BINTANG 5 LEVEL OPSI A ===
         if score>=85:
             bintang="⭐⭐⭐⭐⭐"; bintang_num=5; status="GOD MODE - ALL IN"
-        elif score>=75:
+        elif score>=70:
             bintang="⭐⭐⭐⭐"; bintang_num=4; status="STRONG BREAKOUT - BUY"
-        elif score>=65:
-            bintang="⭐⭐⭐"; bintang_num=3; status="BREAKOUT - BUY TIPIS"
         elif score>=55:
+            bintang="⭐⭐⭐"; bintang_num=3; status="BREAKOUT - BUY TIPIS"
+        elif score>=40:
             bintang="⭐⭐"; bintang_num=2; status="PULLBACK - CICIL"
         else:
             bintang="⭐"; bintang_num=1; status="PANTAU"
@@ -87,15 +91,18 @@ def scan_one(ticker):
         notes=[]
         if vol_r>=1.2: notes.append(f"Volume valid {vol_r:.1f}x")
         if trend_ma20>1: notes.append(f"MA20 nanjak +{trend_ma20:.1f}%")
-        if c>=float(df['High'].rolling(20).max().iloc[-1])*0.98: notes.append("close dekat high 20hr")
+        try:
+            if c>=float(df['High'].rolling(20).max().iloc[-1])*0.98: notes.append("close dekat high 20hr")
+        except: pass
         if macd_bull: notes.append("MACD bull")
 
         return {"ticker":t.replace(".JK",""), "close":int(c), "ma20":int(ma20), "vol":vol_r, "trend":trend_ma20,
                 "rsi":int(rsi14), "adx":int(adx_val), "macd_bull":macd_bull, "score":score,
                 "bintang":bintang, "bintang_num":bintang_num, "status":status,
                 "entry_low":entry_low, "entry_high":entry_high, "sl":sl, "sl_pct":round(sl_pct,1),
-                "tp1":tp1, "tp2":tp2, "rr":round(rr,1), "lot":lot, "notes":", ".join(notes[:3])}
-    except: return None
+                "tp1":tp1, "tp2":tp2, "rr":round(rr,1), "lot":lot, "notes":", ".join(notes[:3]) if notes else "pantau"}
+    except:
+        return None
 
 tickers=load_tickers()
 history=load_history()
@@ -103,7 +110,7 @@ hasil=[]
 for tk in tickers:
     h=scan_one(tk)
     if h: hasil.append(h)
-    time.sleep(0.15)
+    time.sleep(0.12)
 
 hasil=sorted(hasil, key=lambda x: x['score'], reverse=True)
 today_str = str(date.today())
@@ -119,14 +126,21 @@ def get_streak(ticker):
         else: break
     return streak
 
-# OPSI A: TAMPIL BINTANG 3-5 SAJA
 layak_tampil = [h for h in hasil if h['bintang_num'] >= 3]
 top_tampil = layak_tampil[:10] if len(layak_tampil) > 10 else layak_tampil
-
 now=datetime.now().strftime('%d %b %H:%M')
 
 if not layak_tampil:
-    pesan=f"🔥 SCAN SULTAN LITE {now} | {len(tickers)} saham\nTop Bintang 3-5:\n\nHari ini tidak ada bintang 3-5. Semua masih bintang 1-2 (skip dulu).\nTotal ter-scan: {len(hasil)} saham."
+    if hasil:
+        fallback = sorted(hasil, key=lambda x: x['score'], reverse=True)[:5]
+        pesan=f"🔥 SCAN SULTAN LITE {now} | {len(tickers)} saham\nTop Bintang 3-5: Pasar merah, tidak ada bintang 3-5 hari ini.\nDari {len(tickers)} saham, lolos filter minimal: {len(hasil)} saham.\nFallback Top 5 bintang 1-2 (pantau dulu):\n\n"
+        for i,h in enumerate(fallback,1):
+            streak = get_streak(h['ticker'])
+            tag = f" {streak} hari" if streak>=2 else ""
+            pesan+=f"#{i} {h['ticker']}.JK {h['score']} - {h['status']} {h['bintang']}{tag}\n"
+            pesan+=f" Harga:{h['close']} | MA20:{h['ma20']} | Vol:{h['vol']:.1f}x | RSI:{h['rsi']} ADX:{h['adx']}\n\n"
+    else:
+        pesan=f"🔥 SCAN SULTAN LITE {now} | {len(tickers)} saham\nTop Bintang 3-5:\n\nYahoo Finance lagi limit / market libur. Dari {len(tickers)} ticker tidak ada data yang ke-download. Coba run ulang 5 menit lagi.\nTotal ter-scan: {len(tickers)} saham."
 else:
     pesan=f"🔥 SCAN SULTAN LITE {now} | {len(tickers)} saham\nTop {len(top_tampil)} Bintang 3-5 layak pantau:\n\n"
     for i,h in enumerate(top_tampil,1):
