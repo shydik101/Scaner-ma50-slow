@@ -65,28 +65,19 @@ def scan_one(ticker):
 
         if adx_val<10: return None
         if rsi14>88: return None
-        if score<35: return None
+        if score<40: return None
 
-        if score>=92:
-            bintang="⭐⭐⭐⭐⭐⭐⭐⭐⭐⭐"; bintang_num=10; status="GOD MODE 10 - SUPER TREND"
-        elif score>=87:
-            bintang="⭐⭐⭐⭐⭐⭐⭐⭐⭐"; bintang_num=9; status="GOD MODE 9 - ALL IN"
-        elif score>=82:
-            bintang="⭐⭐⭐⭐⭐⭐⭐⭐"; bintang_num=8; status="GOD MODE 8 - STRONG BUY"
-        elif score>=77:
-            bintang="⭐⭐⭐⭐⭐⭐⭐"; bintang_num=7; status="STRONG BREAKOUT 7"
-        elif score>=70:
-            bintang="⭐⭐⭐⭐⭐⭐"; bintang_num=6; status="BREAKOUT 6 - BUY TIPIS"
-        elif score>=62:
-            bintang="⭐⭐⭐⭐⭐"; bintang_num=5; status="BREAKOUT 5 - PANTAU"
+        # === BINTANG 5 LEVEL OPSI A ===
+        if score>=85:
+            bintang="⭐⭐⭐⭐⭐"; bintang_num=5; status="GOD MODE - ALL IN"
+        elif score>=75:
+            bintang="⭐⭐⭐⭐"; bintang_num=4; status="STRONG BREAKOUT - BUY"
+        elif score>=65:
+            bintang="⭐⭐⭐"; bintang_num=3; status="BREAKOUT - BUY TIPIS"
         elif score>=55:
-            bintang="⭐⭐⭐⭐"; bintang_num=4; status="PULLBACK 4 - PANTAU"
-        elif score>=47:
-            bintang="⭐⭐⭐"; bintang_num=3; status="PANTAU 3"
-        elif score>=40:
-            bintang="⭐⭐"; bintang_num=2; status="PANTAU 2"
+            bintang="⭐⭐"; bintang_num=2; status="PULLBACK - CICIL"
         else:
-            bintang="⭐"; bintang_num=1; status="PANTAU 1"
+            bintang="⭐"; bintang_num=1; status="PANTAU"
 
         sl=int(c-atr*1.8); sl_pct=(sl-c)/c*100
         tp1=int(c+atr*1.8); tp2=int(c+atr*3.2)
@@ -115,10 +106,8 @@ for tk in tickers:
     time.sleep(0.15)
 
 hasil=sorted(hasil, key=lambda x: x['score'], reverse=True)
-
-# Simpan history untuk deteksi 3 hari
 today_str = str(date.today())
-history[today_str] = [h['ticker'] for h in hasil[:15]] # simpan 15 teratas buat history
+history[today_str] = [h['ticker'] for h in hasil[:15]]
 if len(history)>7:
     for k in sorted(history.keys())[:-7]: del history[k]
 save_history(history)
@@ -130,38 +119,29 @@ def get_streak(ticker):
         else: break
     return streak
 
-# === FILTER RALAT: HANYA BINTANG 6-10 TAMPIL ===
-layak_tampil = [h for h in hasil if h['bintang_num'] >= 6]
-
-# Jika kurang dari 10, tampilkan semua. Jika lebih dari 10, tampilkan max 10 terbaik
-if len(layak_tampil) <= 10:
-    top_tampil = layak_tampil
-else:
-    top_tampil = layak_tampil[:10]
+# OPSI A: TAMPIL BINTANG 3-5 SAJA
+layak_tampil = [h for h in hasil if h['bintang_num'] >= 3]
+top_tampil = layak_tampil[:10] if len(layak_tampil) > 10 else layak_tampil
 
 now=datetime.now().strftime('%d %b %H:%M')
 
 if not layak_tampil:
-    pesan=f"🔥 SCAN SULTAN LITE {now} | {len(tickers)} saham\nTop Bintang 6-10:\n\nHari ini tidak ada yang bintang 6-10. Semua masih bintang 1-5 (skip dulu).\nTotal ter-scan: {len(hasil)} saham."
+    pesan=f"🔥 SCAN SULTAN LITE {now} | {len(tickers)} saham\nTop Bintang 3-5:\n\nHari ini tidak ada bintang 3-5. Semua masih bintang 1-2 (skip dulu).\nTotal ter-scan: {len(hasil)} saham."
 else:
-    pesan=f"🔥 SCAN SULTAN LITE {now} | {len(tickers)} saham\nTop {len(top_tampil)} Bintang 6-10 layak pantau:\n\n"
+    pesan=f"🔥 SCAN SULTAN LITE {now} | {len(tickers)} saham\nTop {len(top_tampil)} Bintang 3-5 layak pantau:\n\n"
     for i,h in enumerate(top_tampil,1):
         streak = get_streak(h['ticker'])
-        if streak>=3:
-            action = f"🔥🔥🔥 {streak} HARI BERTURUT! SUPER TREND - WAJIB HOLD"
-        elif streak==2:
-            action = f"🔁 MUNCUL 2 HARI! Trend kuat, HOLD / tambah"
+        if streak>=3: action = f"🔥🔥🔥 {streak} HARI BERTURUT! SUPER TREND - WAJIB HOLD"
+        elif streak==2: action = f"🔁 MUNCUL 2 HARI! Trend kuat, HOLD / tambah"
         else:
-            if h['bintang_num']>=8: action="✅ Baru muncul, momentum awal - BUY"
+            if h['bintang_num']==5: action="✅ Baru muncul, momentum awal - BUY"
             else: action="👀 Baru muncul, cicil / pantau breakout"
-
         pesan+=f"#{i} {h['ticker']}.JK {h['score']} - {h['status']} {h['bintang']}\n"
         pesan+=f" Harga:{h['close']} | MA20:{h['ma20']} | Vol:{h['vol']:.1f}x VALID | Trend MA20:{h['trend']:+.1f}%/5hr\n"
         pesan+=f" RSI:{h['rsi']} | ADX:{h['adx']} | MACD:{'BULL' if h['macd_bull'] else 'WAIT'}\n"
         pesan+=f" Entry:{h['entry_low']}-{h['entry_high']} | SL:{h['sl']} ({h['sl_pct']}%) | TP1:{h['tp1']} TP2:{h['tp2']}\n"
         pesan+=f" R:R 1:{h['rr']} | Money: max Rp 1.5jt (~{h['lot']} lot)\n"
-        pesan+=f" Note: {h['notes']}\n"
-        pesan+=f" {action}\n\n"
+        pesan+=f" Note: {h['notes']}\n {action}\n\n"
 
 print(pesan)
 if TOKEN and CHAT_ID:
