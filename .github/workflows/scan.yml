@@ -23,7 +23,14 @@ jobs:
       - name: Install deps
         run: pip install pandas requests yfinance
       - name: BUY Batch 1 - Big Caps
-        run: python scan.py
+        run: |
+          echo "=== DEBUG BATCH 1 ==="
+          ls -la
+          echo "--- cek file ---"
+          cat tickers-batch1.txt || echo "FILE tickers-batch1.txt TIDAK ADA!"
+          wc -l tickers-batch1.txt
+          echo "--- jalanin scan ---"
+          python -u scan.py
         env:
           TICKER_FILE: tickers-batch1.txt
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -37,7 +44,11 @@ jobs:
           git commit -m "update holdings batch1 $(date)" || echo "no changes to commit"
           git push || true
       - name: BUY Batch 2 - Gorengan
-        run: python scan.py
+        run: |
+          echo "=== DEBUG BATCH 2 ==="
+          cat tickers-batch2.txt || echo "FILE tickers-batch2.txt TIDAK ADA!"
+          wc -l tickers-batch2.txt
+          python -u scan.py
         env:
           TICKER_FILE: tickers-batch2.txt
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
