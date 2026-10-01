@@ -1,72 +1,99 @@
-import os, json, requests, pandas as pd, argparse
+import os, requests, pandas as pd, time, json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
+TICKER_FILE = os.getenv("TICKER_FILE", "tickers-batch1.txt")
+BATCH_LABEL = os.getenv("BATCH_LABEL", "BIGCAPS")
 PROXY_URL = "https://yahoo-proxy.rizalmawardi766.workers.dev"
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-HOLDINGS_FILE = "my_holdings.json"
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+HISTORY_FILE = "history.json"
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--tipe", default="ALL")
-args = parser.parse_args()
-FILTER_TIPE = args.tipe.upper()
+# Tentukan MA jebol tergantung batch
+IS_GORENGAN = "batch2" in TICKER_FILE.lower() or "gorengan" in BATCH_LABEL.lower()
 
-def send_telegram(msg):
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID: print(msg); return
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    try: requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": msg}, timeout=15)
-    except: pass
+def send(msg):
+    if TOKEN and CHAT_ID:
+        try: requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", json={"chat_id": CHAT_ID, "text": msg}, timeout=20)
+        except: pass
+    print(msg)
 
-def get_data(ticker):
-    try:
-        r = requests.get(f"{PROXY_URL}/?ticker={ticker}", timeout=15)
-        data = r.json()
-        closes = data["chart"]["result"][0]["indicators"]["quote"][0]["close"]
-        vols = data["chart"]["result"][0]["indicators"]["quote"][0]["volume"]
-        df = pd.DataFrame({"close": closes, "vol": vols}).dropna()
-        if len(df)<60: return None
-        df["MA50"] = df["close"].rolling(50).mean(); df["MA20"] = df["close"].rolling(20).mean()
-        delta = df["close"].diff(); gain = (delta.where(delta>0,0)).rolling(14).mean(); loss = (-delta.where(delta<0,0)).rolling(14).mean()
-        rs = gain/loss; df["RSI"] = 100 - (100/(1+rs)); df["vol_avg"] = df["vol"].rolling(20).mean(); df["vol_ratio"] = df["vol"]/df["vol_avg"]
-        return df
-    except: return None
+def get_df(ticker):
+    for attempt in range(3):
+        try:
+            r = requests.get(f"{PROXY_URL}/?ticker={ticker}", timeout=15).json()
+            q = r["chart"]["result"][0]["indicators"]["quote"][0]
+            df = pd.DataFrame({"close": q["close"], "vol": q["volume"]}).dropna()
+            if len(df) >= 60: return df, attempt+1
+        except:
+            time.sleep(1); continue
+    return None, 3
 
-def check_exit(ticker, info, df):
-    last = df.iloc[-1]; prev = df.iloc[-2]
-    close = last["close"]; ma50 = last["MA50"]; ma20 = last["MA20"]; rsi = last["RSI"]; vol = last["vol_ratio"]
-    entry = info.get("entry",0); date_buy = info.get("date",""); tipe = info.get("tipe","BIGCAP")
-    pnl = ((close-entry)/entry*100) if entry>0 else 0
-    try: hold_days = (datetime.now() - datetime.strptime(date_buy, "%Y-%m-%d")).days
-    except: hold_days = 0
+def analyze_exit(ticker):
+    df, retry = get_df(ticker)
+    if df is None: return None
+    df["MA20"]=df["close"].rolling(20).mean(); df["MA50"]=df["close"].rolling(50).mean()
+    df["vol_avg"]=df["vol"].rolling(20).mean(); df["vol_ratio"]=df["vol"]/df["vol_avg"]
+    delta=df["close"].diff(); gain=delta.where(delta>0,0).rolling(14).mean(); loss=-delta.where(delta<0,0).rolling(14).mean()
+    df["RSI"]=100-(100/(1+gain/loss))
 
-    if tipe == "GORENGAN":
-        if close < ma20:
-            return f"🔴 SELL GORENGAN {ticker} - JEBOL MA20\nBeli {date_buy} @ {entry} | Now {int(close)} ({pnl:+.1f}%) | {hold_days}h\nAksi: JUAL SEKARANG!"
-        if rsi < 50 and vol < 1.0:
-            return f"🟡 WARNING GORENGAN {ticker} - LOYO\nBeli {date_buy} @ {entry} | Now {int(close)} ({pnl:+.1f}%)\nRSI {int(rsi)} Vol {vol:.1f}x\nAksi: TP cepat!"
+    last=df.iloc[-1]
+    if pd.isna(last["MA20"]) or pd.isna(last["MA50"]): return None
+    c, ma20, ma50 = last["close"], last["MA20"], last["MA50"]
+    rsi=last["RSI"] if not pd.isna(last["RSI"]) else 50
+    vol=last["vol_ratio"] if not pd.isna(last["vol_ratio"]) else 1.0
+
+    # LOGIKA EXIT BINTANG 5
+    if IS_GORENGAN:
+        # Gorengan ketat: jebol MA20 aja SELL
+        if c < ma20 and c < ma50 and vol >= 2.0:
+            label, stars = "SUPER SELL - Jebol MA20+MA50 Vol Gede", 5
+        elif c < ma20 and vol >= 1.5:
+            label, stars = "STRONG SELL - Jebol MA20", 4
+        elif c < ma20:
+            label, stars = "SELL - Jebol MA20", 3
+        elif c < ma20 * 1.02 and rsi < 45:
+            label, stars = "WEAK SELL - Dekat MA20", 2
+        else:
+            return None
     else:
-        if close < ma50 and prev["close"] < ma50:
-            return f"🔴 SELL BIGCAP {ticker} - JEBOL MA50\nBeli {date_buy} @ {entry} | Now {int(close)} ({pnl:+.1f}%) | {hold_days} hari\nAksi: JUAL"
-        if close < ma20 and rsi < 45 and hold_days > 10:
-            return f"🟡 WARNING BIGCAP {ticker}\nBeli {date_buy} @ {entry} | Now {int(close)} ({pnl:+.1f}%)\nAksi: Watch TP"
-    return None
+        # Bigcaps longgar: jebol MA50 baru SELL
+        if c < ma20 and c < ma50 and vol >= 2.0:
+            label, stars = "SUPER SELL - Jebol MA50 Long Term", 5
+        elif c < ma50:
+            label, stars = "STRONG SELL - Jebol MA50", 4
+        elif c < ma50 * 1.02 and rsi < 45:
+            label, stars = "SELL - Rawan Jebol MA50", 3
+        else:
+            return None
+
+    msg=f"#{ticker} {label}\n{'⭐'*stars} ({stars}/5) - {BATCH_LABEL}\n"
+    msg+=f"Price: {int(c)} MA20:{int(ma20)} MA50:{int(ma50)}\n"
+    msg+=f"Vol Jual: {vol:.1f}x RSI: {int(rsi)}\n"
+    msg+=f"Aksi: Jual Sesi 1 Besok"
+    return {"msg": msg, "stars": stars, "retry": retry}
 
 def main():
-    if not os.path.exists(HOLDINGS_FILE): send_telegram("📭 Holdings kosong."); return
-    with open(HOLDINGS_FILE, "r") as f: holdings = json.load(f)
-    if FILTER_TIPE!= "ALL": holdings = {k:v for k,v in holdings.items() if v.get("tipe","") == FILTER_TIPE}
-    alerts=[]
-    for ticker, info in holdings.items():
-        df = get_data(ticker)
-        if df is None: continue
-        a = check_exit(ticker, info, df)
-        if a: alerts.append(a)
-    if not alerts:
-        msg = f"✅ CHECK {FILTER_TIPE} {datetime.now():%d %b %H:%M}\n{len(holdings)} saham aman\n"
-        for t, inf in holdings.items(): msg += f"- {t} [{inf.get('tipe','')}] {inf['date']} @ {inf['entry']}\n"
-        send_telegram(msg)
-    else:
-        full = f"⚠️ EXIT {FILTER_TIPE} {datetime.now():%d %b %H:%M} - {len(alerts)} Saham\n\n" + "\n\n".join(alerts)
-        send_telegram(full)
+    start=time.time()
+    with open(TICKER_FILE) as f: tickers=[x.strip() for x in f if x.strip() and not x.startswith("#")]
+    results=[]; total_retry=0
+    with ThreadPoolExecutor(max_workers=15) as ex:
+        futs={ex.submit(analyze_exit,t):t for t in tickers}
+        for fu in as_completed(futs):
+            r=fu.result()
+            if r: results.append(r); total_retry+=r["retry"]
+
+    results=sorted(results, key=lambda x:x["stars"], reverse=True)[:10]
+    elapsed=time.time()-start
+
+    if not results:
+        # Kalau gak ada yang SELL, diam aja biar gak berisik (atau kirim log kalau mau)
+        print(f"{BATCH_LABEL} - Tidak ada SELL signal")
+        return
+
+    header=f"⚠️ EXIT ALERT V10.1 {datetime.now():%d %b %H:%M}\n{BATCH_LABEL} | {TICKER_FILE}\nFilter: Bintang 3+ | Top 10\n\n"
+    body="\n\n".join([r["msg"] for r in results])
+    footer=f"\n\n━━━━━━━━━━━━━━━━\n📊 Total Cek: {len(tickers)} | SELL: {len(results)}\n🔁 Retry 3x: {total_retry} | ⏱️ {elapsed:.1f}s | Maks: 5 Bintang"
+    send(header+body+footer)
 
 if __name__=="__main__": main()
