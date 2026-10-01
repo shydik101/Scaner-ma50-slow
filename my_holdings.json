@@ -13,5 +13,15 @@
     "buy_price": 8150.0,
     "date": "2026-10-01",
     "batch": "tickers-batch1.txt"
+  },
+  "BEKS.JK": {
+    "buy_price": 27.0,
+    "date": "2026-10-01",
+    "batch": "tickers-batch2.txt"
+  },
+  "SAPX.JK": {
+    "buy_price": 444.0,
+    "date": "2026-10-01",
+    "batch": "tickers-batch2.txt"
   }
 }
