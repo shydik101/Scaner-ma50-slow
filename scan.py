@@ -1,22 +1,15 @@
-import yfinance as yf
-import requests, os, time, json, numpy as np, random, urllib.parse
-from datetime import datetime, date, timedelta
+import requests, os, time, json, numpy as np
+from datetime import datetime, date
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 TOKEN = os.getenv("TELEGRAM_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+TWELVE_KEY = os.getenv("TWELVEDATA_API_KEY")
 MODAL = 5000000
 HISTORY_FILE = "history_top.json"
 TICKER_FILE = os.getenv("TICKER_FILE", "daytrade-observe-tickers.txt")
 BATCH_LABEL = os.getenv("BATCH_LABEL", "SCAN")
-
-try:
-    from curl_cffi import requests as c_requests
-    HAS_CURL = True
-except:
-    HAS_CURL = False
-    c_requests = None
 
 def rsi(s, p=14):
     d=s.diff(); g=d.where(d>0,0).rolling(p).mean(); l=-d.where(d<0,0).rolling(p).mean()
@@ -33,7 +26,7 @@ def load_tickers():
                     print(f"{BATCH_LABEL} Load {len(t)} from {fname}")
                     return t
         except: pass
-    return ["BBCA.JK","BBRI.JK","BMRI.JK","BBNI.JK"]
+    return ["BBCA.JK","BBRI.JK"]
 
 def load_history():
     try:
@@ -42,59 +35,51 @@ def load_history():
 def save_history(h):
     with open(HISTORY_FILE,'w') as f: json.dump(h,f)
 
-# === V6.6 MULTI PROXY ROTATOR ===
-PROXIES = [
-    lambda u: f"https://api.allorigins.win/raw?url={urllib.parse.quote(u, safe='')}",
-    lambda u: f"https://corsproxy.io/?{urllib.parse.quote(u, safe='')}",
-    lambda u: f"https://api.codetabs.com/v1/proxy?quest={urllib.parse.quote(u, safe='')}",
-]
+def fetch_twelvedata(ticker):
+    if not TWELVE_KEY:
+        print("NO TWELVEDATA_API_KEY!")
+        return None
+    try:
+        # TwelveData endpoint
+        url = f"https://api.twelvedata.com/time_series?symbol={ticker}&interval=1day&outputsize=90&apikey={TWELVE_KEY}&order=ASC"
+        r = requests.get(url, timeout=12)
+        if r.status_code!=200:
+            print(f"twelve {ticker} http {r.status_code}")
+            return None
+        j=r.json()
+        if j.get('status')=='error' or 'values' not in j:
+            print(f"twelve {ticker} error {j.get('message')}")
+            return None
+        df=pd.DataFrame(j['values'])
+        df['datetime']=pd.to_datetime(df['datetime'])
+        df.set_index('datetime', inplace=True)
+        df=df.sort_index()
+        df.rename(columns={'open':'Open','high':'High','low':'Low','close':'Close','volume':'Volume'}, inplace=True)
+        df[['Open','High','Low','Close','Volume']] = df[['Open','High','Low','Close','Volume']].astype(float)
+        if len(df)>=30:
+            return df
+    except Exception as e:
+        print(f"twelve fail {ticker}: {e}")
+    return None
 
-def fetch_yahoo_multiproxy(ticker):
-    y_url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?range=3mo&interval=1d"
-    random.shuffle(PROXIES)
-    for proxy_fn in PROXIES:
-        try:
-            p_url = proxy_fn(y_url)
-            r = requests.get(p_url, headers={"User-Agent":"Mozilla/5.0"}, timeout=8)
-            if r.status_code!= 200: continue
-            # codetabs kadang balikin html, cek json
-            try:
-                j = r.json()
-            except:
-                continue
-            result = j['chart']['result'][0]
-            timestamps = result['timestamp']
-            ohlc = result['indicators']['quote'][0]
-            adj = result['indicators'].get('adjclose',[{}])[0].get('adjclose') or ohlc['close']
-            df = pd.DataFrame({'Open': ohlc['open'],'High': ohlc['high'],'Low': ohlc['low'],'Close': adj,'Volume': ohlc['volume']}, index=pd.to_datetime(timestamps, unit='s'))
-            df = df.dropna()
-            if len(df) >= 30:
-                return df, "y_proxy"
-        except:
-            continue
-    return None, "failed"
-
-def fetch_stooq_multiproxy(ticker):
-    y_url = f"https://stooq.com/q/d/l/?s={ticker.lower()}&i=d"
-    for proxy_fn in PROXIES:
-        try:
-            p_url = proxy_fn(y_url)
-            r = requests.get(p_url, timeout=8)
-            if r.status_code!=200 or 'Date' not in r.text: continue
-            from io import StringIO
-            df = pd.read_csv(StringIO(r.text))
-            if len(df)<30: continue
-            df.columns=[c.capitalize() for c in df.columns]
-            df['Date']=pd.to_datetime(df['Date']); df.set_index('Date', inplace=True); df.sort_index(inplace=True)
-            if len(df)>=30: return df, "st_proxy"
-        except: continue
-    return None, "failed"
+def fetch_stooq(ticker):
+    try:
+        url = f"https://stooq.com/q/d/l/?s={ticker.lower()}&i=d"
+        r = requests.get(url, headers={"User-Agent":"Mozilla/5.0"}, timeout=8)
+        if r.status_code!=200 or 'Date' not in r.text: return None
+        from io import StringIO
+        df = pd.read_csv(StringIO(r.text))
+        if len(df)<30: return None
+        df.columns=[c.capitalize() for c in df.columns]
+        df['Date']=pd.to_datetime(df['Date']); df.set_index('Date', inplace=True); df.sort_index(inplace=True)
+        if len(df)>=30: return df
+    except: return None
 
 def get_data(ticker):
-    df, src = fetch_yahoo_multiproxy(ticker)
-    if df is not None: return df, src
-    df, src = fetch_stooq_multiproxy(ticker)
-    if df is not None: return df, src
+    df = fetch_twelvedata(ticker)
+    if df is not None and len(df)>=30: return df, "twelve"
+    df = fetch_stooq(ticker)
+    if df is not None and len(df)>=30: return df, "stooq"
     return None, "failed"
 
 def scan_one(ticker):
@@ -102,9 +87,9 @@ def scan_one(ticker):
         t=ticker.upper().strip()
         if not t.endswith(".JK"): t+=".JK"
         df, source = get_data(t)
-        if df is None or len(df)<30: return None, source, t
+        if df is None or len(df)<30: return None, source
         c=float(df['Close'].iloc[-1]); o=float(df['Open'].iloc[-1])
-        if c < 50 or c > 10000: return None, source, t
+        if c < 50 or c > 10000: return None, source
         vol=float(df['Volume'].iloc[-1]); vol_avg=float(df['Volume'].rolling(20).mean().iloc[-1]) if len(df)>=20 else vol
         vol_r=vol/vol_avg if vol_avg>0 else 0
         ma20=float(df['Close'].rolling(20).mean().iloc[-1]) if len(df)>=20 else c
@@ -137,7 +122,7 @@ def scan_one(ticker):
         if c>o: score+=10
         if rsi14>88: score-=15
         if adx_val<10: score-=10
-        if score<25: return None, source, t
+        if score<25: return None, source
         if score>=85: bintang="⭐⭐⭐⭐⭐"; bintang_num=5; status="GOD MODE - ALL IN"
         elif score>=70: bintang="⭐⭐⭐⭐"; bintang_num=4; status="STRONG BREAKOUT - BUY"
         elif score>=55: bintang="⭐⭐⭐"; bintang_num=3; status="BREAKOUT - BUY TIPIS"
@@ -149,17 +134,20 @@ def scan_one(ticker):
         if vol_r>=1.2: notes.append(f"Vol {vol_r:.1f}x")
         if trend_ma20>1: notes.append(f"MA20 +{trend_ma20:.1f}%")
         if macd_bull: notes.append("MACD bull")
-        return {"ticker":t.replace(".JK",""), "close":int(c), "ma20":int(ma20), "vol":vol_r, "trend":trend_ma20,"rsi":int(rsi14), "adx":int(adx_val), "macd_bull":macd_bull, "score":score,"bintang":bintang, "bintang_num":bintang_num, "status":status,"entry_low":entry_low, "entry_high":entry_high, "sl":sl, "sl_pct":round(sl_pct,1),"tp1":tp1, "tp2":tp2, "rr":round(rr,1), "lot":lot, "notes":", ".join(notes[:3]), "source":source}, source, t
+        return {"ticker":t.replace(".JK",""), "close":int(c), "ma20":int(ma20), "vol":vol_r, "trend":trend_ma20,"rsi":int(rsi14), "adx":int(adx_val), "macd_bull":macd_bull, "score":score,"bintang":bintang, "bintang_num":bintang_num, "status":status,"entry_low":entry_low, "entry_high":entry_high, "sl":sl, "sl_pct":round(sl_pct,1),"tp1":tp1, "tp2":tp2, "rr":round(rr,1), "lot":lot, "notes":", ".join(notes[:3]), "source":source}, source
     except Exception as e:
-        return None, "failed", ticker
+        print(f"scan error {ticker}: {e}")
+        return None, "failed"
 
-# === V6.6 PARALLEL SCAN 8 WORKERS ===
-tickers=load_tickers(); history=load_history(); hasil=[]; stats={"y_proxy":0,"st_proxy":0,"failed":0}
-print(f"Starting parallel scan {len(tickers)} tickers with 8 workers...")
+tickers=load_tickers()
+history=load_history()
+hasil=[]; stats={"twelve":0,"stooq":0,"failed":0}
+
+print(f"V7.0 START {len(tickers)} tickers | TWELVE_KEY={'OK' if TWELVE_KEY else 'MISSING'}")
 with ThreadPoolExecutor(max_workers=8) as executor:
     futures = {executor.submit(scan_one, tk): tk for tk in tickers}
     for future in as_completed(futures):
-        h, src, tk = future.result()
+        h, src = future.result()
         if h:
             hasil.append(h)
             stats[src]=stats.get(src,0)+1
@@ -167,31 +155,35 @@ with ThreadPoolExecutor(max_workers=8) as executor:
             stats[src]=stats.get(src,0)+1
 
 hasil=sorted(hasil, key=lambda x: x['score'], reverse=True)
-today_str = str(date.today()); history[today_str] = [h['ticker'] for h in hasil[:15]]
+today_str = str(date.today())
+history[today_str] = [h['ticker'] for h in hasil[:15]]
 if len(history)>7:
     for k in sorted(history.keys())[:-7]: del history[k]
 save_history(history)
+
 def get_streak(ticker):
     streak=0
     for d in sorted(history.keys(), reverse=True):
         if ticker in history.get(d, []): streak+=1
         else: break
     return streak
+
 layak_tampil = [h for h in hasil if h['bintang_num'] >= 3]
 top_tampil = layak_tampil[:10] if len(layak_tampil) > 10 else layak_tampil
-import pytz; now=datetime.now(pytz.timezone("Asia/Jakarta")).strftime('%d %b %H:%M WIB')
-source_info = f"y_proxy:{stats.get('y_proxy',0)} st_proxy:{stats.get('st_proxy',0)} fail:{stats.get('failed',0)}"
+import pytz
+now=datetime.now(pytz.timezone("Asia/Jakarta")).strftime('%d %b %H:%M WIB')
+source_info = f"twelve:{stats.get('twelve',0)} stooq:{stats.get('stooq',0)} fail:{stats.get('failed',0)}"
 
 if not layak_tampil:
     if hasil:
         fallback = sorted(hasil, key=lambda x: x['score'], reverse=True)[:5]
-        pesan=f"🔥 {BATCH_LABEL} V6.6 5JT {now} | {len(tickers)} saham\n[{source_info}]\nTop Bintang 3-5: Pasar merah, tidak ada bintang 3-5. Lolos minimal: {len(hasil)}\nFallback Top 5:\n\n"
+        pesan=f"🔥 {BATCH_LABEL} V7.0 5JT {now} | {len(tickers)} saham\n[{source_info}]\nFallback Top 5:\n\n"
         for i,h in enumerate(fallback,1):
             pesan+=f"#{i} {h['ticker']}.JK {h['score']} - {h['status']} {h['bintang']} [{h['source']}]\n Harga:{h['close']} | Vol:{h['vol']:.1f}x | RSI:{h['rsi']} ADX:{h['adx']} | Lot {h['lot']}\n\n"
     else:
-        pesan=f"🔥 {BATCH_LABEL} V6.6 5JT {now} | {len(tickers)} saham\n[{source_info}]\n\nGAGAL SEMUA! Coba run ulang 10 menit lagi.\nTotal ter-scan: {len(tickers)} saham."
+        pesan=f"🔥 {BATCH_LABEL} V7.0 5JT {now} | {len(tickers)} saham\n[{source_info}]\n\nGAGAL SEMUA! Cek TWELVEDATA_API_KEY di Secrets belum kepasang."
 else:
-    pesan=f"🔥 {BATCH_LABEL} V6.6 5JT {now} | {len(tickers)} saham\n[{source_info}]\nTop {len(top_tampil)} Bintang 3-5 layak pantau (lolos: {len(hasil)}):\n\n"
+    pesan=f"🔥 {BATCH_LABEL} V7.0 5JT {now} | {len(tickers)} saham\n[{source_info}]\nTop {len(top_tampil)} Bintang 3-5 layak pantau (lolos: {len(hasil)}):\n\n"
     for i,h in enumerate(top_tampil,1):
         streak = get_streak(h['ticker'])
         if streak>=3: action = f"🔥🔥🔥 {streak} HARI BERTURUT! SUPER TREND"
