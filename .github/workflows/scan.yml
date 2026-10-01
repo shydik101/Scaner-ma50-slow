@@ -1,30 +1,75 @@
-name: Scanner V8.3
+name: Scan Saham V9.2
+
 on:
-  workflow_dispatch:
   schedule:
-    - cron: '10 8 * * 1-5'
+    - cron: '10 9 * * 1-5'  # 16:10 WIB - BUY Batch 1 & 2
+    - cron: '50 7 * * 1-5'  # 14:50 WIB - EXIT Gorengan Harian
+    - cron: '30 2 * * 5'    # 09:30 WIB Jumat - EXIT Big Cap Mingguan
+  workflow_dispatch:
+
 jobs:
-  scan:
+  buy-scan:
+    if: github.event.schedule == '10 9 * * 1-5' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: {python-version: '3.11'}
-      - run: pip install -r requirements.txt
-      - name: Batch 1
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install deps
+        run: pip install pandas requests
+      - name: BUY Batch 1 - Big Caps
+        run: python scan.py
         env:
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TICKER_FILE: tickers-batch1.txt
-          BATCH_LABEL: BATCH 1/2
-        run: python scan.py
-      - run: sleep 60
-      - name: Batch 2
-        env:
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          TICKER_FILE: tickers-batch2.txt
-          BATCH_LABEL: BATCH 2/2
+      - name: Save Holdings
+        run: |
+          git config --global user.name "bot"
+          git config --global user.email "bot@github.com"
+          git add my_holdings.json || true
+          git commit -m "update holdings batch1" || true
+          git push || true
+      - name: BUY Batch 2 - Gorengan
         run: python scan.py
+        env:
+          TICKER_FILE: tickers-batch2.txt
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      - name: Save Holdings Batch2
+        run: |
+          git add my_holdings.json || true
+          git commit -m "update holdings batch2" || true
+          git push || true
+
+  exit-gorengan:
+    if: github.event.schedule == '50 7 * * 1-5'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - run: pip install pandas requests
+      - name: EXIT Gorengan Daily 14:50 WIB
+        run: python scan_exit.py --tipe GORENGAN
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+  exit-bigcap:
+    if: github.event.schedule == '30 2 * * 5'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - run: pip install pandas requests
+      - name: EXIT Big Cap Jumat 09:30 WIB
+        run: python scan_exit.py --tipe BIGCAP
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
