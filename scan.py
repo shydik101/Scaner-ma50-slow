@@ -19,7 +19,7 @@ def rsi(s, p=14):
     return 100-(100/(1+rs))
 
 def load_tickers():
-    for fname in [TICKER_FILE, "daytrade-observe-tickers.txt", "tickers-batch1.txt"]:
+    for fname in [TICKER_FILE, "daytrade-observe-tickers.txt", "tickers-batch1.txt", "tickers-batch2.txt"]:
         try:
             with open(fname) as f:
                 t=[x.strip() for x in f if x.strip() and not x.startswith("#")]
@@ -41,21 +41,17 @@ def save_history(h):
     with open(HISTORY_FILE,'w') as f:
         json.dump(h,f)
 
-PROXIES = [
-    "https://api.allorigins.win/raw?url={}",
-    "https://corsproxy.io/?{}",
-    "https://api.codetabs.com/v1/proxy?quest={}",
-]
+MY_PROXY = "https://yahoo-proxy.rizalmawardi766.workers.dev"
+PROXIES = [f"{MY_PROXY}/?url={{}}"]
 
 def fetch_yahoo_rotator(ticker):
     y_url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?range=3mo&interval=1d"
     enc_url = urllib.parse.quote(y_url, safe='')
-    for proxy_template in random.sample(PROXIES, len(PROXIES)):
+    for proxy_template in PROXIES:
         try:
             proxy_url = proxy_template.format(enc_url)
-            r = requests.get(proxy_url, timeout=15)
+            r = requests.get(proxy_url, timeout=10)
             if r.status_code!=200:
-                time.sleep(0.5)
                 continue
             if '"chart"' not in r.text:
                 continue
@@ -69,10 +65,8 @@ def fetch_yahoo_rotator(ticker):
             df=pd.DataFrame({'Open': ohlc['open'],'High': ohlc['high'],'Low': ohlc['low'],'Close': adj,'Volume': ohlc['volume']}, index=pd.to_datetime(timestamps, unit='s'))
             df=df.dropna()
             if len(df)>=30:
-                domain = proxy_template.split('/')[2]
-                return df, domain
+                return df, "my-proxy"
         except:
-            time.sleep(0.5)
             continue
     return None, "failed"
 
@@ -189,16 +183,15 @@ tickers=load_tickers()
 history=load_history()
 hasil=[]
 stats={}
-print(f"V8.4.1 FIX START {len(tickers)}")
+print(f"V8.5 NGEBUT MY-PROXY START {len(tickers)}")
 
-with ThreadPoolExecutor(max_workers=2) as executor:
+with ThreadPoolExecutor(max_workers=15) as executor:
     futures = {executor.submit(scan_one, tk): tk for tk in tickers}
     for future in as_completed(futures):
         h, src = future.result()
         if h:
             hasil.append(h)
         stats[src]=stats.get(src,0)+1
-        time.sleep(0.4)
 
 hasil=sorted(hasil, key=lambda x: x['score'], reverse=True)
 today_str = str(date.today())
@@ -226,11 +219,11 @@ source_info = " ".join([f"{k}:{v}" for k,v in stats.items()])
 
 if not layak_tampil:
     fb = sorted(hasil, key=lambda x: x['score'], reverse=True)[:5]
-    pesan = f"🔥 {BATCH_LABEL} V8.4.1 5JT {now} | {len(tickers)} saham\n[{source_info}]\nFallback Top 5:\n\n"
+    pesan = f"🔥 {BATCH_LABEL} V8.5 NGEBUT {now} | {len(tickers)} saham\n[{source_info}]\nFallback Top 5:\n\n"
     for i,h in enumerate(fb,1):
         pesan += f"#{i} {h['ticker']}.JK {h['score']} {h['status']} {h['bintang']} [{h['source']}]\n Harga:{h['close']} Vol:{h['vol']:.1f}x RSI:{h['rsi']} Lot {h['lot']}\n\n"
 else:
-    pesan = f"🔥 {BATCH_LABEL} V8.4.1 5JT {now} | {len(tickers)} saham\n[{source_info}]\nTop {len(top_tampil)} Bintang 3-5 (lolos {len(hasil)}):\n\n"
+    pesan = f"🔥 {BATCH_LABEL} V8.5 NGEBUT {now} | {len(tickers)} saham\n[{source_info}]\nTop {len(top_tampil)} Bintang 3-5 (lolos {len(hasil)}):\n\n"
     for i,h in enumerate(top_tampil,1):
         streak=get_streak(h['ticker'])
         action="🔥 2 HARI!" if streak>=2 else "Baru"
