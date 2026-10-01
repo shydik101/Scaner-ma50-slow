@@ -1,1 +1,17 @@
-{}
+{
+  "ENRG.JK": {
+    "buy_price": 1410.0,
+    "date": "2026-10-01",
+    "batch": "tickers-batch1.txt"
+  },
+  "DSSA.JK": {
+    "buy_price": 1120.0,
+    "date": "2026-10-01",
+    "batch": "tickers-batch1.txt"
+  },
+  "GEMS.JK": {
+    "buy_price": 8150.0,
+    "date": "2026-10-01",
+    "batch": "tickers-batch1.txt"
+  }
+}
