@@ -1,82 +1,87 @@
-name: Scan Saham V9.2
-
-permissions:
-  contents: write
+name: Hybrid Scan V10.1 Bintang 5
 
 on:
   schedule:
-    - cron: '10 9 * * 1-5'  # 16:10 WIB - BUY Batch 1 & 2
-    - cron: '50 7 * * 1-5'  # 14:50 WIB - EXIT Gorengan Harian
-    - cron: '30 2 * * 5'    # 09:30 WIB Jumat - EXIT Big Cap Mingguan
+    # BUY SCAN jam 16:10 WIB (09:10 UTC) Senin-Jumat
+    - cron: '10 9 * * 1-5'
+    # EXIT GORENGAN jam 14:50 WIB (07:50 UTC) Senin-Jumat
+    - cron: '50 7 * * 1-5'
+    # EXIT BIGCAPS jam 09:30 WIB (02:30 UTC) Jumat
+    - cron: '30 2 * * 5'
   workflow_dispatch:
 
 jobs:
-  buy-scan:
+  # JOB 1: SCAN BUY BIGCAPS & GORENGAN
+  scan-buy:
     if: github.event.schedule == '10 9 * * 1-5' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - file: tickers-batch1.txt
+            label: BUY BIGCAPS
+          - file: tickers-batch2.txt
+            label: BUY GORENGAN
     steps:
-      - uses: actions/checkout@v5
-      - name: Set up Python
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
+
       - name: Install deps
-        run: pip install pandas requests yfinance
-      - name: BUY Batch 1 - Big Caps
+        run: pip install requests pandas
+
+      - name: Run Hybrid Scan Bintang 5
         run: python scan.py
         env:
-          TICKER_FILE: tickers-batch1.txt
+          TICKER_FILE: ${{ matrix.file }}
+          BATCH_LABEL: ${{ matrix.label }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-      - name: Save Holdings Batch 1
+
+      - name: Save history streak 7 hari
         run: |
-          git config --global user.name "bot"
-          git config --global user.email "bot@github.com"
-          git pull --rebase || true
-          git add my_holdings.json || true
-          git commit -m "update holdings batch1 $(date)" || echo "no changes to commit"
-          git push || true
-      - name: BUY Batch 2 - Gorengan
-        run: python scan.py
-        env:
-          TICKER_FILE: tickers-batch2.txt
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-      - name: Save Holdings Batch 2
-        run: |
-          git config --global user.name "bot"
-          git config --global user.email "bot@github.com"
-          git pull --rebase || true
-          git add my_holdings.json || true
-          git commit -m "update holdings batch2 $(date)" || echo "no changes to commit"
+          git config user.name "scan-bot"
+          git config user.email "bot@github.com"
+          git add history.json || true
+          git commit -m "update history ${{ matrix.label }} $(date +%Y-%m-%d)" || true
           git push || true
 
-  exit-gorengan:
+  # JOB 2: EXIT GORENGAN HARIAN
+  scan-exit-gorengan:
     if: github.event.schedule == '50 7 * * 1-5'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
-      - run: pip install pandas requests yfinance
-      - name: EXIT Gorengan Daily 14:50 WIB
-        run: python scan_exit.py --tipe GORENGAN
+          python-version: '3.11'
+      - run: pip install requests pandas
+      - name: Run Exit Gorengan
+        run: python scan_exit.py
         env:
+          TICKER_FILE: tickers-batch2.txt
+          BATCH_LABEL: EXIT GORENGAN
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
-  exit-bigcap:
+  # JOB 3: EXIT BIGCAPS MINGGUAN JUMAT
+  scan-exit-bigcaps:
     if: github.event.schedule == '30 2 * * 5'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
-      - run: pip install pandas requests yfinance
-      - name: EXIT Big Cap Jumat 09:30 WIB
-        run: python scan_exit.py --tipe BIGCAP
+          python-version: '3.11'
+      - run: pip install requests pandas
+      - name: Run Exit Bigcaps
+        run: python scan_exit.py
         env:
+          TICKER_FILE: tickers-batch1.txt
+          BATCH_LABEL: EXIT BIGCAPS
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
