@@ -16,6 +16,7 @@ TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 WIB = timezone(timedelta(hours=7))
 
+# === LABEL TYPE - FIX UTAMA ===
 if "batch1" in TICKER_FILE.lower():
     TYPE_LABEL = "🔵 BIGCAPS"
 elif "batch2" in TICKER_FILE.lower():
@@ -78,6 +79,9 @@ def analyze_exit(ticker):
 def main():
     start=time.time()
     now_wib = datetime.now(WIB)
+    if not os.path.exists(TICKER_FILE):
+        print(f"{TYPE_LABEL} File {TICKER_FILE} tidak ada, skip {now_wib:%H:%M WIB}")
+        return
     with open(TICKER_FILE) as f: tickers=[x.strip() for x in f if x.strip() and not x.startswith("#")]
     results=[]; total_retry=0
     with ThreadPoolExecutor(max_workers=15) as ex:
@@ -90,7 +94,7 @@ def main():
     if not results:
         print(f"{TYPE_LABEL} {BATCH_LABEL} [{MARKET}] - Tidak ada SELL signal {now_wib:%H:%M WIB}")
         return
-    header=f"⚠️ *EXIT ALERT {TYPE_LABEL} V11.6*\n{now_wib:%d %b %H:%M WIB} | {BATCH_LABEL} | {TICKER_FILE} | Market:{MARKET}\nFilter: Bintang 3+ | Top 10\n\n"
+    header=f"⚠️ *EXIT ALERT {TYPE_LABEL} V11.8 FIX*\n{now_wib:%d %b %H:%M WIB} | {BATCH_LABEL} | {TICKER_FILE} | Market:{MARKET}\nFilter: Bintang 3+ | Top 10\n\n"
     body="\n\n".join([r["msg"] for r in results])
     footer=f"\n\n━━━━━━━━━━━━━━━━\n{TYPE_LABEL} | Total: {len(tickers)} | SELL: {len(results)}\n🔁 Retry: {total_retry} | ⏱️ {elapsed:.1f}s"
     send(header+body+footer)
