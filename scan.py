@@ -11,7 +11,6 @@ args, _ = parser.parse_known_args()
 MARKET = args.market.upper()
 TICKER_FILE = args.ticker_file
 BATCH_LABEL = os.getenv("BATCH_LABEL", f"{MARKET}-HYBRID")
-
 HISTORY_FILE = "history_etf.json" if MARKET == "US" else "history.json"
 PROXY_URL = "https://yahoo-proxy.rizalmawardi766.workers.dev"
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -19,9 +18,7 @@ CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 def send(msg):
     if TOKEN and CHAT_ID:
-        try:
-            requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage",
-            json={"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}, timeout=20)
+        try: requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", json={"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}, timeout=20)
         except: pass
     print(msg)
 
@@ -112,11 +109,9 @@ def main():
     today_list=[r["ticker"] for r in results]
     save_history_merged(history, today_list)
     history=load_history()
-
     if not results:
         send(f"🔍 *{BATCH_LABEL}* {datetime.now():%d %b %H:%M} [{MARKET}]\nTidak ada sinyal Bintang 3+ hari ini.")
         return
-
     header = f"🔥 *SCAN HYBRID V11 PRO*\n{datetime.now():%d %b %H:%M} WIB | Market: {MARKET}\nFilter: Bintang 3+ | Top {len(results)} | {BATCH_LABEL}\n"
     body_lines=[]
     for i, r in enumerate(results, 1):
@@ -125,10 +120,8 @@ def main():
         entry_low=entry*0.995; entry_high=entry*1.005; sl_pct=(entry-sl)/entry*100; tp_pct=(tp-entry)/entry*100
         stars="⭐"*r["stars"]
         msg = f"━━━━━━━━━━━━━━━━━━\n*{i}. #{r['ticker']}* — {r['label']} {stars} ({r['stars']}/5)\n"
-        if MARKET=="US":
-            msg+=f"💰 Price: ${r['c']:.2f} | MA20:{r['ma20']:.2f} MA50:{r['ma50']:.2f} ({r['dist']:+.1f}%)\n"
-        else:
-            msg+=f"💰 Price: {int(r['c'])} | MA20:{int(r['ma20'])} MA50:{int(r['ma50'])} ({r['dist']:+.1f}%)\n"
+        if MARKET=="US": msg+=f"💰 Price: ${r['c']:.2f} | MA20:{r['ma20']:.2f} MA50:{r['ma50']:.2f} ({r['dist']:+.1f}%)\n"
+        else: msg+=f"💰 Price: {int(r['c'])} | MA20:{int(r['ma20'])} MA50:{int(r['ma50'])} ({r['dist']:+.1f}%)\n"
         msg+=f"📊 Vol:{r['vol']:.1f}x | RSI:{int(r['rsi'])} ADX:{r['adx']} | Lot:{r['lot']}\n"
         msg+=f"🎯 Entry: {entry_low:.2f}-{entry_high:.2f} | SL: {sl:.2f} (-{sl_pct:.0f}%)\n"
         msg+=f"💎 TP: {tp:.2f} (+{tp_pct:.0f}%) | *RR: 1 : {rr:.1f}*\n"
@@ -138,7 +131,6 @@ def main():
         elif streak==1: msg+=f"✨ New - Pertama kali muncul"
         else: msg+=f"💤 Absen lama, baru muncul lagi"
         body_lines.append(msg)
-
     footer=f"\n\n━━━━━━━━━━━━━━━━\n📊 Total: {len(tickers)} | Lolos: {len(results)} | ⏱️ {time.time()-start:.1f}s"
     send(header + "\n\n".join(body_lines) + footer)
 
