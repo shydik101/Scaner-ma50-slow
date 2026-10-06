@@ -1,4 +1,4 @@
-name: Hybrid Scan V11.7 FIX
+name: Hybrid Scan V11.8 FIX FINAL
 
 on:
   schedule:
@@ -29,9 +29,9 @@ jobs:
       - name: Run BUY+EXIT US ETF
         if: steps.check_us.outputs.run == 'true'
         run: |
-          ls -lh tickers*.txt history*.json || true
-          python scan.py --market US --ticker_file tickers_etf_us.txt || echo "scan buy error tapi lanjut"
-          python scan_exit.py --market US --ticker_file tickers_etf_us.txt || echo "scan exit error tapi lanjut"
+          ls -lh tickers*.txt || true
+          python scan.py --market US --ticker_file tickers_etf_us.txt || echo "scan buy us error tapi lanjut"
+          python scan_exit.py --market US --ticker_file tickers_etf_us.txt || echo "scan exit us error tapi lanjut"
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
