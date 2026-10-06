@@ -1,0 +1,22 @@
+name: Weekly Market Check (QQQ + IDX)
+
+on:
+  schedule:
+    - cron: '0 0 * * 0' # Minggu 00:00 UTC = 07:00 WIB
+  workflow_dispatch: # bisa test manual dari tab Actions
+
+jobs:
+  weekly-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: pip install yfinance pandas requests
+      - name: Run weekly check
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python tools/weekly_market_check.py
