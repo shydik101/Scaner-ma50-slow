@@ -18,7 +18,8 @@ CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 def send(msg):
     if TOKEN and CHAT_ID:
-        try: requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", json={"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}, timeout=20)
+        try:
+            requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", json={"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}, timeout=20)
         except: pass
     print(msg)
 
@@ -70,11 +71,12 @@ def analyze(ticker):
     if df is None: return None
     df["MA20"]=df["close"].rolling(20).mean(); df["MA50"]=df["close"].rolling(50).mean()
     df["vol_avg"]=df["vol"].rolling(20).mean(); df["vol_ratio"]=df["vol"]/df["vol_avg"]
+    df["ATR"]=df["close"].diff().abs().rolling(14).mean()
     delta=df["close"].diff(); gain=delta.where(delta>0,0).rolling(14).mean(); loss=-delta.where(delta<0,0).rolling(14).mean()
     df["RSI"]=100-(100/(1+gain/loss)); df["ADX"]=(df["close"].diff().abs().rolling(14).mean()/df["close"]*1000).clip(10,50)
     last=df.iloc[-1]; prev=df.iloc[-2]
-    if pd.isna(last["MA20"]) or pd.isna(last["MA50"]): return None
-    c, ma20, ma50 = last["close"], last["MA20"], last["MA50"]
+    if pd.isna(last["MA20"]) or pd.isna(last["MA50"]) or pd.isna(last["ATR"]): return None
+    c, ma20, ma50, atr = last["close"], last["MA20"], last["MA50"], last["ATR"]
     rsi=last["RSI"] if not pd.isna(last["RSI"]) else 50; vol=last["vol_ratio"] if not pd.isna(last["vol_ratio"]) else 1.0; adx=int(last["ADX"]) if not pd.isna(last["ADX"]) else 20
     dist50=(c-ma50)/ma50*100
     score=0
@@ -92,8 +94,21 @@ def analyze(ticker):
     elif -3<=dist50<=3: label, stars = "NEAR BREAKOUT", 1
     else: label, stars = "WEAK/DOWNTREND", 0
     if stars<3 or score<55: return None
+    atr_pct = (atr / c * 100) if c>0 else 2
+    sl_dist = atr * 1.5
+    sl_dist = max(c*0.03, min(c*0.07, sl_dist))
+    sl = c - sl_dist
+    if ma20>ma50 and sl < ma20*0.97:
+        sl = ma20*0.97
+    if adx >= 35: tp_mult = 2.8
+    elif adx >= 28: tp_mult = 2.2
+    elif adx >= 22: tp_mult = 1.6
+    else: tp_mult = 1.2
+    tp = c + (atr * tp_mult)
+    if stars == 5: tp = c + (atr * 3.2)
+    risk = c - sl; reward = tp - c; rr = reward / risk if risk>0 else 0
     lot=int(1000000/c) if MARKET!="US" and c>0 else int(1000/c) if c>0 else 0
-    return {"ticker": ticker, "score": score, "label": label, "stars": stars, "c": c, "ma20": ma20, "ma50": ma50, "dist": dist50, "vol": vol, "rsi": rsi, "adx": adx, "lot": lot, "retry": retry}
+    return {"ticker": ticker, "score": score, "label": label, "stars": stars, "c": c, "ma20": ma20, "ma50": ma50, "dist": dist50, "vol": vol, "rsi": rsi, "adx": adx, "lot": lot, "retry": retry, "sl": sl, "tp": tp, "rr": rr, "atr": atr, "atr_pct": atr_pct}
 
 def main():
     start=time.time()
@@ -112,24 +127,26 @@ def main():
     if not results:
         send(f"🔍 *{BATCH_LABEL}* {datetime.now():%d %b %H:%M} [{MARKET}]\nTidak ada sinyal Bintang 3+ hari ini.")
         return
-    header = f"🔥 *SCAN HYBRID V11 PRO*\n{datetime.now():%d %b %H:%M} WIB | Market: {MARKET}\nFilter: Bintang 3+ | Top {len(results)} | {BATCH_LABEL}\n"
+    header = f"🔥 *SCAN HYBRID V11.3 PRO*\n{datetime.now():%d %b %H:%M} WIB | Market: {MARKET}\nFilter: Bintang 3+ | RR ATR Dinamis | {BATCH_LABEL}\n"
     body_lines=[]
     for i, r in enumerate(results, 1):
         streak=count_streak(history, r["ticker"])
-        entry=r["c"]; sl=entry*0.95; risk=entry-sl; tp=entry+(risk*2); rr=(tp-entry)/risk
-        entry_low=entry*0.995; entry_high=entry*1.005; sl_pct=(entry-sl)/entry*100; tp_pct=(tp-entry)/entry*100
+        sl_pct=(r['c']-r['sl'])/r['c']*100; tp_pct=(r['tp']-r['c'])/r['c']*100
         stars="⭐"*r["stars"]
-        msg = f"━━━━━━━━━━━━━━━━━━\n*{i}. #{r['ticker']}* — {r['label']} {stars} ({r['stars']}/5)\n"
-        if MARKET=="US": msg+=f"💰 Price: ${r['c']:.2f} | MA20:{r['ma20']:.2f} MA50:{r['ma50']:.2f} ({r['dist']:+.1f}%)\n"
-        else: msg+=f"💰 Price: {int(r['c'])} | MA20:{int(r['ma20'])} MA50:{int(r['ma50'])} ({r['dist']:+.1f}%)\n"
-        msg+=f"📊 Vol:{r['vol']:.1f}x | RSI:{int(r['rsi'])} ADX:{r['adx']} | Lot:{r['lot']}\n"
-        msg+=f"🎯 Entry: {entry_low:.2f}-{entry_high:.2f} | SL: {sl:.2f} (-{sl_pct:.0f}%)\n"
-        msg+=f"💎 TP: {tp:.2f} (+{tp_pct:.0f}%) | *RR: 1 : {rr:.1f}*\n"
-        if streak>=3: msg+=f"🔥 Muncul {streak}x berturut - Lagi HOT!"
-        elif streak==2: msg+=f"🔁 Muncul {streak}x berturut - Lanjutan kemarin"
-        elif streak==1 and len(history)>1: msg+=f"✨ New - Muncul pertama dalam 7 hari"
-        elif streak==1: msg+=f"✨ New - Pertama kali muncul"
-        else: msg+=f"💤 Absen lama, baru muncul lagi"
+        msg = f"━━━━━━━━━━━━━━━━━━\n*{i}. #{r['ticker']}* — {r['label']} {stars} ({r['stars']}/5) *Skor:{r['score']}*\n"
+        if MARKET=="US": msg+=f"💰 ${r['c']:.2f} | MA20:{r['ma20']:.2f} MA50:{r['ma50']:.2f} ({r['dist']:+.1f}%)\n"
+        else: msg+=f"💰 {int(r['c'])} | MA20:{int(r['ma20'])} MA50:{int(r['ma50'])} ({r['dist']:+.1f}%)\n"
+        msg+=f"📊 Vol:{r['vol']:.1f}x | RSI:{int(r['rsi'])} ADX:{r['adx']} | ATR:{r['atr_pct']:.1f}% | Lot:{r['lot']}\n"
+        msg+=f"🎯 SL: {r['sl']:.0f} (-{sl_pct:.1f}%) | TP: {r['tp']:.0f} (+{tp_pct:.1f}%)\n"
+        msg+=f"💎 *RR: 1 : {r['rr']:.2f}*\n"
+        if r['rr'] >= 2.5: msg+=f"✅ RR Excellent\n"
+        elif r['rr'] >= 1.8: msg+=f"👍 RR Good\n"
+        elif r['rr'] >= 1.2: msg+=f"⚠️ RR Cukup\n"
+        else: msg+=f"❌ RR Kecil\n"
+        if streak>=3: msg+=f"🔥 {streak}x berturut HOT!"
+        elif streak==2: msg+=f"🔁 {streak}x berturut"
+        elif streak==1: msg+=f"✨ New"
+        else: msg+=f"💤 Baru muncul"
         body_lines.append(msg)
     footer=f"\n\n━━━━━━━━━━━━━━━━\n📊 Total: {len(tickers)} | Lolos: {len(results)} | ⏱️ {time.time()-start:.1f}s"
     send(header + "\n\n".join(body_lines) + footer)
