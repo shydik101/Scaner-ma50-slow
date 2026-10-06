@@ -1,6 +1,6 @@
 import os, requests, pandas as pd, time, json
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import argparse
 
 parser = argparse.ArgumentParser()
@@ -15,11 +15,21 @@ HISTORY_FILE = "history_etf.json" if MARKET == "US" else "history.json"
 PROXY_URL = "https://yahoo-proxy.rizalmawardi766.workers.dev"
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+WIB = timezone(timedelta(hours=7))
+
+# === LABEL TYPE ===
+if "batch1" in TICKER_FILE.lower():
+    TYPE_LABEL = "🔵 BIGCAPS"
+elif "batch2" in TICKER_FILE.lower():
+    TYPE_LABEL = "🔴 GORENGAN"
+elif "etf" in TICKER_FILE.lower() or MARKET == "US":
+    TYPE_LABEL = "🇺🇸 US ETF"
+else:
+    TYPE_LABEL = TICKER_FILE
 
 def send(msg):
     if TOKEN and CHAT_ID:
-        try:
-            requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", json={"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}, timeout=20)
+        try: requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", json={"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}, timeout=20)
         except: pass
     print(msg)
 
@@ -40,11 +50,11 @@ def load_history():
     except: return {}
 
 def save_history_merged(history, today_tickers):
-    today = datetime.now().strftime("%d-%m-%Y")
+    today = datetime.now(WIB).strftime("%d-%m-%Y")
     existing = history.get(today, [])
     merged = sorted(list(set(existing + today_tickers)))
     history[today] = merged
-    cutoff = datetime.now() - timedelta(days=7)
+    cutoff = datetime.now(WIB) - timedelta(days=7)
     def parse(k):
         try: return datetime.strptime(k, "%d-%m-%Y")
         except:
@@ -98,8 +108,7 @@ def analyze(ticker):
     sl_dist = atr * 1.5
     sl_dist = max(c*0.03, min(c*0.07, sl_dist))
     sl = c - sl_dist
-    if ma20>ma50 and sl < ma20*0.97:
-        sl = ma20*0.97
+    if ma20>ma50 and sl < ma20*0.97: sl = ma20*0.97
     if adx >= 35: tp_mult = 2.8
     elif adx >= 28: tp_mult = 2.2
     elif adx >= 22: tp_mult = 1.6
@@ -108,10 +117,11 @@ def analyze(ticker):
     if stars == 5: tp = c + (atr * 3.2)
     risk = c - sl; reward = tp - c; rr = reward / risk if risk>0 else 0
     lot=int(1000000/c) if MARKET!="US" and c>0 else int(1000/c) if c>0 else 0
-    return {"ticker": ticker, "score": score, "label": label, "stars": stars, "c": c, "ma20": ma20, "ma50": ma50, "dist": dist50, "vol": vol, "rsi": rsi, "adx": adx, "lot": lot, "retry": retry, "sl": sl, "tp": tp, "rr": rr, "atr": atr, "atr_pct": atr_pct}
+    return {"ticker": ticker, "score": score, "label": label, "stars": stars, "c": c, "ma20": ma20, "ma50": ma50, "dist": dist50, "vol": vol, "rsi": rsi, "adx": adx, "lot": lot, "retry": retry, "sl": sl, "tp": tp, "rr": rr, "atr_pct": atr_pct}
 
 def main():
     start=time.time()
+    now_wib = datetime.now(WIB)
     with open(TICKER_FILE) as f: tickers=[x.strip() for x in f if x.strip() and not x.startswith("#")]
     history=load_history()
     results=[]
@@ -125,9 +135,9 @@ def main():
     save_history_merged(history, today_list)
     history=load_history()
     if not results:
-        send(f"🔍 *{BATCH_LABEL}* {datetime.now():%d %b %H:%M} [{MARKET}]\nTidak ada sinyal Bintang 3+ hari ini.")
+        send(f"🔍 *{TYPE_LABEL} - {BATCH_LABEL}* {now_wib:%d %b %H:%M WIB} [{MARKET}]\nTidak ada sinyal Bintang 3+ hari ini.")
         return
-    header = f"🔥 *SCAN HYBRID V11.3 PRO*\n{datetime.now():%d %b %H:%M} WIB | Market: {MARKET}\nFilter: Bintang 3+ | RR ATR Dinamis | {BATCH_LABEL}\n"
+    header = f"🔥 *SCAN BUY {TYPE_LABEL} V11.6*\n{now_wib:%d %b %H:%M WIB} | Market: {MARKET} | {BATCH_LABEL}\nFilter: Bintang 3+ | RR ATR Dinamis\n"
     body_lines=[]
     for i, r in enumerate(results, 1):
         streak=count_streak(history, r["ticker"])
@@ -137,18 +147,13 @@ def main():
         if MARKET=="US": msg+=f"💰 ${r['c']:.2f} | MA20:{r['ma20']:.2f} MA50:{r['ma50']:.2f} ({r['dist']:+.1f}%)\n"
         else: msg+=f"💰 {int(r['c'])} | MA20:{int(r['ma20'])} MA50:{int(r['ma50'])} ({r['dist']:+.1f}%)\n"
         msg+=f"📊 Vol:{r['vol']:.1f}x | RSI:{int(r['rsi'])} ADX:{r['adx']} | ATR:{r['atr_pct']:.1f}% | Lot:{r['lot']}\n"
-        msg+=f"🎯 SL: {r['sl']:.0f} (-{sl_pct:.1f}%) | TP: {r['tp']:.0f} (+{tp_pct:.1f}%)\n"
-        msg+=f"💎 *RR: 1 : {r['rr']:.2f}*\n"
-        if r['rr'] >= 2.5: msg+=f"✅ RR Excellent\n"
-        elif r['rr'] >= 1.8: msg+=f"👍 RR Good\n"
-        elif r['rr'] >= 1.2: msg+=f"⚠️ RR Cukup\n"
-        else: msg+=f"❌ RR Kecil\n"
-        if streak>=3: msg+=f"🔥 {streak}x berturut HOT!"
-        elif streak==2: msg+=f"🔁 {streak}x berturut"
+        msg+=f"🎯 SL: {r['sl']:.0f} (-{sl_pct:.1f}%) | TP: {r['tp']:.0f} (+{tp_pct:.1f}%) | *RR 1:{r['rr']:.2f}*\n"
+        if streak>=3: msg+=f"🔥 {streak}x HOT!"
+        elif streak==2: msg+=f"🔁 {streak}x"
         elif streak==1: msg+=f"✨ New"
         else: msg+=f"💤 Baru muncul"
         body_lines.append(msg)
-    footer=f"\n\n━━━━━━━━━━━━━━━━\n📊 Total: {len(tickers)} | Lolos: {len(results)} | ⏱️ {time.time()-start:.1f}s"
+    footer=f"\n\n━━━━━━━━━━━━━━━━\n{TYPE_LABEL} | Total: {len(tickers)} | Lolos: {len(results)} | ⏱️ {time.time()-start:.1f}s"
     send(header + "\n\n".join(body_lines) + footer)
 
 if __name__=="__main__": main()
