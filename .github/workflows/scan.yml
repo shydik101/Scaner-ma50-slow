@@ -1,4 +1,4 @@
-name: Hybrid Scan V11.2 PRO FIX
+name: Hybrid Scan V11.3 PRO RR Dinamis
 
 on:
   schedule:
@@ -21,7 +21,7 @@ jobs:
           python-version: '3.11'
       - run: pip install requests pandas
 
-      - name: Cek Jadwal - BUY IDX 16:10 WIB
+      - name: Cek Jadwal BUY IDX 16:10 WIB
         id: check_buy
         run: |
           SCHED="${{ github.event.schedule }}"
@@ -29,7 +29,7 @@ jobs:
           elif [ "$SCHED" == "10 9 * * 1-5" ]; then echo "run=true" >> $GITHUB_OUTPUT
           else echo "run=false" >> $GITHUB_OUTPUT; fi
 
-      - name: Run BUY BIGCAPS + GORENGAN (FIX MERGE)
+      - name: Run BUY BIGCAPS + GORENGAN
         if: steps.check_buy.outputs.run == 'true'
         run: |
           python scan.py --market IDX --ticker_file tickers-batch1.txt
@@ -39,7 +39,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
-      - name: Save history IDX
+      - name: Save history IDX MERGED
         if: always() && steps.check_buy.outputs.run == 'true'
         run: |
           git config user.name "scan-bot"
@@ -56,7 +56,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.11' }
       - run: pip install requests pandas
-      - name: Cek Jadwal - EXIT GORENGAN 14:50 WIB
+      - name: Cek Jadwal EXIT GORENGAN 14:50 WIB
         id: check
         run: |
           SCHED="${{ github.event.schedule }}"
@@ -77,7 +77,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.11' }
       - run: pip install requests pandas
-      - name: Cek Jadwal - EXIT BIGCAPS Jumat 09:30 WIB
+      - name: Cek Jadwal EXIT BIGCAPS Jumat 09:30 WIB
         id: check
         run: |
           SCHED="${{ github.event.schedule }}"
@@ -98,7 +98,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.11' }
       - run: pip install requests pandas
-      - name: Cek Jadwal - US ETF 05:00 WIB
+      - name: Cek Jadwal US ETF 05:00 WIB
         id: check_us
         run: |
           SCHED="${{ github.event.schedule }}"
