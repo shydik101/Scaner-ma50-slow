@@ -1,68 +1,87 @@
-import requests, os, sys, pandas as pd
+import requests, os, pandas as pd
 
-# Biar bisa run manual di laptop: python tools/weekly_market_check.py
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") or input("Masukkan BOT TOKEN (kosongkan untuk test lokal): ")
-CHAT_ID = os.getenv("TELEGRAM_CHAT_ID") or "123"
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 WORKER = os.getenv("WORKER_URL", "https://yahoo-proxy.rizalmawardi766.workers.dev")
-MODE = os.getenv("MODE", "full") # full atau test_telegram
 
 def get_data(ticker):
     try:
-        url = f"{WORKER}/v8/finance/chart/{ticker}?range=2y&interval=1d"
+        url = f"{WORKER}/?ticker={ticker}"
         r = requests.get(url, timeout=20)
-        closes = r.json()['chart']['result'][0]['indicators']['quote'][0]['close']
-        df = pd.Series([c for c in closes if c is not None])
+        print(f"GET {url} -> {r.status_code} {r.text[:200]}")
+        j = r.json()
+
+        # Worker kamu kemungkinan balikin format Yahoo langsung atau custom
+        # Kita handle 2 kemungkinan
+        if 'chart' in j:
+            closes = j['chart']['result'][0]['indicators']['quote'][0]['close']
+            df = pd.Series([c for c in closes if c is not None])
+        elif 'close' in j or 'prices' in j or 'data' in j:
+            raw = j.get('close') or j.get('prices') or j.get('data') or j.get('chart')
+            # kalau array of dict
+            if isinstance(raw, list) and isinstance(raw[0], dict):
+                df = pd.Series([x.get('close') or x.get('c') for x in raw])
+            else:
+                df = pd.Series(raw)
+            df = df.dropna()
+        else:
+            # fallback: j langsung list harga
+            df = pd.Series(list(j.values())[0] if isinstance(j, dict) else j)
+
         price = float(df.iloc[-1])
         ma50 = float(df.rolling(50).mean().iloc[-1])
         ma200 = float(df.rolling(200).mean().iloc[-1])
+
         delta = df.diff()
         gain = delta.where(delta > 0, 0).rolling(14).mean()
         loss = -delta.where(delta < 0, 0).rolling(14).mean()
         rsi = 100 - (100 / (1 + gain/loss))
         rsi_last = float(rsi.iloc[-1])
-        st, emoji = ("BAHAYA","🔴") if price < ma200 else ("DISKON","🟡") if price < ma50 else ("AMAN","🟢")
+
+        if price < ma200:
+            st, emoji = "BAHAYA 🔴 Jebol MA200", "🔴"
+        elif price < ma50:
+            st, emoji = "DISKON 🟡 Di bawah MA50", "🟡"
+        else:
+            st, emoji = "AMAN ✅ Di atas MA", "🟢"
         return price, ma50, ma200, rsi_last, st, emoji
     except Exception as e:
-        print(f"Error {ticker}: {e}")
-        return 0,0,0,0,f"Error","⚪"
+        print(f"FAIL {ticker}: {e}")
+        return 0,0,0,0,f"Error {e}"[:100],"⚪"
 
-def fmt(t, p):
+def fmt(t,p):
+    if p==0: return "Error"
     return f"Rp{p:,.0f}" if "JK" in t or t in ["^JKSE","IDR=X"] else f"{p:.2f}%" if t=="^TNX" else f"${p:.2f}"
 
 def send_telegram(text):
-    if not BOT_TOKEN or not CHAT_ID.isdigit():
-        print("\n[MODE LOKAL] Pesan tidak dikirim ke Telegram, cuma print di sini:\n")
-        print(text)
-        return
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     requests.post(url, json={"chat_id": CHAT_ID, "text": text, "parse_mode": "Markdown"})
 
-if MODE == "test_telegram":
-    send_telegram("✅ Test Manual Berhasil! Bot Weekly Check nyambung ke Telegram.")
-    sys.exit(0)
-
-# Data
-qqq, ihsg, bmri, tlkm, asii, us10y, usdidr = [get_data(t) for t in ["QQQ","^JKSE","BMRI.JK","TLKM.JK","ASII.JK","^TNX","IDR=X"]]
+datas = {}
+for t in ["QQQ","^JKSE","BMRI.JK","TLKM.JK","ASII.JK","^TNX","IDR=X"]:
+    datas[t] = get_data(t)
 
 msg = f"""
-📈 *WEEKLY MARKET CHECK* - Manual Run
-━━━━━━━━━━━━━━━━━━
-*🇺🇸 QQQ* {qqq[5]} *{qqq[4]}*
-`Price {fmt('QQQ',qqq[0])} | MA200 {fmt('QQQ',qqq[2])} | RSI {qqq[3]:.0f}`
-US10Y: *{fmt('^TNX',us10y[0])}* {us10y[5]}
+📈 *WEEKLY MARKET CHECK*
+Minggu 07:00 WIB | Pakai Worker
 
 ━━━━━━━━━━━━━━━━━━
-*🇮🇩 IDX* {ihsg[5]} *{ihsg[4]}* - {fmt('^JKSE',ihsg[0])}
-*BMRI* {bmri[5]} {bmri[4]} - {fmt('BMRI.JK',bmri[0])} | RSI {bmri[3]:.0f}
-*TLKM* {tlkm[5]} {tlkm[4]} - {fmt('TLKM.JK',tlkm[0])} | RSI {tlkm[3]:.0f}
-*ASII* {asii[5]} {asii[4]} - {fmt('ASII.JK',asii[0])} | RSI {asii[3]:.0f}
+*🇺🇸 US*
+*QQQ* {datas['QQQ'][5]} {datas['QQQ'][4]}
+`{fmt('QQQ',datas['QQQ'][0])} | MA200 {fmt('QQQ',datas['QQQ'][2])} | RSI {datas['QQQ'][3]:.0f}`
+US10Y: *{fmt('^TNX',datas['^TNX'][0])}*
 
-USD/IDR: *{fmt('IDR=X',usdidr[0])}*
+━━━━━━━━━━━━━━━━━━
+*🇮🇩 IDX*
+*IHSG* {datas['^JKSE'][5]} `{fmt('^JKSE',datas['^JKSE'][0])}`
+*BMRI* {datas['BMRI.JK'][5]} `{fmt('BMRI.JK',datas['BMRI.JK'][0])} | RSI {datas['BMRI.JK'][3]:.0f}`
+*TLKM* {datas['TLKM.JK'][5]} `{fmt('TLKM.JK',datas['TLKM.JK'][0])} | RSI {datas['TLKM.JK'][3]:.0f}`
+*ASII* {datas['ASII.JK'][5]} `{fmt('ASII.JK',datas['ASII.JK'][0])} | RSI {datas['ASII.JK'][3]:.0f}`
+
+USD/IDR: *{fmt('IDR=X',datas['IDR=X'][0])}*
 ━━━━━━━━━━━━━━━━━━
 """
-
-bahaya = sum(1 for x in [qqq,ihsg,bmri,tlkm,asii] if x[4]=="BAHAYA")
-msg += "⚠️ WASPADA - Tahan cash\n" if bahaya else "🟢 AMAN - HOLD\n"
+msg += "🟢 *HOLD* - Trend aman\n" if all("AMAN" in d[4] for d in [datas['QQQ'],datas['^JKSE']]) else "🟡 *WASPADA* - Ada diskon\n"
 
 send_telegram(msg)
 print(msg)
