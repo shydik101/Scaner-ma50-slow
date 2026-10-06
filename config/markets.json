@@ -1,4 +1,16 @@
 {
-  "IDX": {"suffix": ".JK", "timezone": "Asia/Jakarta", "scan_hour": "15:30"},
-  "US": {"suffix": "", "timezone": "America/New_York", "scan_hour": "05:00"}
+  "IDX": {
+    "suffix": ".JK",
+    "min_volume": 1000000,
+    "timezone": "Asia/Jakarta",
+    "scan_hour": "15:30",
+    "currency": "IDR"
+  },
+  "US": {
+    "suffix": "",
+    "min_volume": 500000,
+    "timezone": "America/New_York",
+    "scan_hour": "16:00",
+    "currency": "USD"
+  }
 }
