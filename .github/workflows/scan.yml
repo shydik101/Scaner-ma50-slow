@@ -1,10 +1,11 @@
-name: Hybrid Scan V10.1 Bintang 5
+name: Hybrid Scan V11.1 Multi Market
 
 on:
   schedule:
     - cron: '10 9 * * 1-5'
     - cron: '50 7 * * 1-5'
     - cron: '30 2 * * 5'
+    - cron: '0 22 * * 1-5'
   workflow_dispatch:
 
 jobs:
@@ -15,8 +16,10 @@ jobs:
         include:
           - file: tickers-batch1.txt
             label: BUY BIGCAPS
+            market: IDX
           - file: tickers-batch2.txt
             label: BUY GORENGAN
+            market: IDX
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -24,16 +27,12 @@ jobs:
           python-version: '3.11'
       - run: pip install requests pandas
       
-      - name: Cek Jadwal - BUY hanya jam 16:10 WIB
+      - name: Cek Jadwal - BUY IDX hanya jam 16:10 WIB
         id: check_buy
         run: |
-          HOUR=$(date -u +%H%M)
           SCHED="${{ github.event.schedule }}"
-          echo "Jam UTC sekarang: $HOUR, Schedule trigger: $SCHED"
-          # Jika manual dispatch, selalu jalan
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             echo "run=true" >> $GITHUB_OUTPUT
-          # Jika cron BUY
           elif [ "$SCHED" == "10 9 * * 1-5" ]; then
             echo "run=true" >> $GITHUB_OUTPUT
           else
@@ -42,14 +41,15 @@ jobs:
 
       - name: Run Hybrid Scan Bintang 5
         if: steps.check_buy.outputs.run == 'true'
-        run: python scan.py
+        run: python scan.py --market ${{ matrix.market }} --ticker_file ${{ matrix.file }}
         env:
           TICKER_FILE: ${{ matrix.file }}
           BATCH_LABEL: ${{ matrix.label }}
+          MARKET: ${{ matrix.market }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
-      - name: Save history
+      - name: Save history IDX
         if: always() && steps.check_buy.outputs.run == 'true'
         run: |
           git config user.name "scan-bot"
@@ -73,10 +73,8 @@ jobs:
           if [ "${{ github.event.schedule }}" == "50 7 * * 1-5" ]; then echo "run=true" >> $GITHUB_OUTPUT; else echo "run=false" >> $GITHUB_OUTPUT; fi
       - name: Run Exit Gorengan
         if: steps.check.outputs.run == 'true'
-        run: python scan_exit.py
+        run: python scan_exit.py --market IDX --ticker_file tickers-batch2.txt
         env:
-          TICKER_FILE: tickers-batch2.txt
-          BATCH_LABEL: EXIT GORENGAN
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
@@ -94,9 +92,50 @@ jobs:
           if [ "${{ github.event.schedule }}" == "30 2 * * 5" ]; then echo "run=true" >> $GITHUB_OUTPUT; else echo "run=false" >> $GITHUB_OUTPUT; fi
       - name: Run Exit Bigcaps
         if: steps.check.outputs.run == 'true'
-        run: python scan_exit.py
+        run: python scan_exit.py --market IDX --ticker_file tickers-batch1.txt
         env:
-          TICKER_FILE: tickers-batch1.txt
-          BATCH_LABEL: EXIT BIGCAPS
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+  # JOB BARU UNTUK ETF US
+  scan-us-etf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install requests pandas
+      - name: Cek Jadwal - US ETF jam 05:00 WIB
+        id: check_us
+        run: |
+          SCHED="${{ github.event.schedule }}"
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then echo "run=true" >> $GITHUB_OUTPUT
+          elif [ "$SCHED" == "0 22 * * 1-5" ]; then echo "run=true" >> $GITHUB_OUTPUT
+          else echo "run=false" >> $GITHUB_OUTPUT; fi
+
+      - name: Run BUY Scan US ETF
+        if: steps.check_us.outputs.run == 'true'
+        run: python scan.py --market US --ticker_file tickers_etf_us.txt
+        env:
+          MARKET: US
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+      - name: Run EXIT Scan US ETF
+        if: steps.check_us.outputs.run == 'true'
+        run: python scan_exit.py --market US --ticker_file tickers_etf_us.txt
+        env:
+          MARKET: US
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+      - name: Save history ETF
+        if: always() && steps.check_us.outputs.run == 'true'
+        run: |
+          git config user.name "scan-bot"
+          git config user.email "bot@github.com"
+          git pull --rebase origin main || true
+          git add history_etf.json -f || true
+          git diff --staged --quiet || git commit -m "history ETF US $(date +%Y-%m-%d_%H:%M)"
+          git push || true
