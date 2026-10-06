@@ -1,16 +1,30 @@
 import os, requests, pandas as pd, time, json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
+import argparse
 
-TICKER_FILE = os.getenv("TICKER_FILE", "tickers-batch1.txt")
-BATCH_LABEL = os.getenv("BATCH_LABEL", "BIGCAPS")
+# === ARGS BARU MULTI MARKET ===
+parser = argparse.ArgumentParser()
+parser.add_argument('--market', default=os.getenv("MARKET", "IDX"), help='IDX or US')
+parser.add_argument('--ticker_file', default=os.getenv("TICKER_FILE", "tickers-batch1.txt"))
+args, _ = parser.parse_known_args()
+
+MARKET = args.market.upper()
+TICKER_FILE = args.ticker_file
+BATCH_LABEL = os.getenv("BATCH_LABEL", f"{MARKET}-{args.ticker_file.replace('.txt','')}")
+
 PROXY_URL = "https://yahoo-proxy.rizalmawardi766.workers.dev"
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-HISTORY_FILE = "history.json"
 
-# Tentukan MA jebol tergantung batch
-IS_GORENGAN = "batch2" in TICKER_FILE.lower() or "gorengan" in BATCH_LABEL.lower()
+# History beda IDX vs US biar gak kecampur
+HISTORY_FILE = "history_etf.json" if MARKET == "US" else "history.json"
+
+# Gorengan detection tetap jalan
+IS_GORENGAN = "batch2" in TICKER_FILE.lower() or "gorengan" in BATCH_LABEL.lower() or "ETF" in TICKER_FILE.upper()
+# Untuk US ETF kita buat lebih ketat kayak gorengan
+if MARKET == "US":
+    IS_GORENGAN = True
 
 def send(msg):
     if TOKEN and CHAT_ID:
@@ -43,9 +57,7 @@ def analyze_exit(ticker):
     rsi=last["RSI"] if not pd.isna(last["RSI"]) else 50
     vol=last["vol_ratio"] if not pd.isna(last["vol_ratio"]) else 1.0
 
-    # LOGIKA EXIT BINTANG 5
     if IS_GORENGAN:
-        # Gorengan ketat: jebol MA20 aja SELL
         if c < ma20 and c < ma50 and vol >= 2.0:
             label, stars = "SUPER SELL - Jebol MA20+MA50 Vol Gede", 5
         elif c < ma20 and vol >= 1.5:
@@ -57,7 +69,6 @@ def analyze_exit(ticker):
         else:
             return None
     else:
-        # Bigcaps longgar: jebol MA50 baru SELL
         if c < ma20 and c < ma50 and vol >= 2.0:
             label, stars = "SUPER SELL - Jebol MA50 Long Term", 5
         elif c < ma50:
@@ -67,8 +78,14 @@ def analyze_exit(ticker):
         else:
             return None
 
-    msg=f"#{ticker} {label}\n{'⭐'*stars} ({stars}/5) - {BATCH_LABEL}\n"
-    msg+=f"Price: {int(c)} MA20:{int(ma20)} MA50:{int(ma50)}\n"
+    # Format harga beda IDX vs US
+    if MARKET == "US":
+        price_str = f"${c:.2f} MA20:${ma20:.2f} MA50:${ma50:.2f}"
+    else:
+        price_str = f"Price:{int(c)} MA20:{int(ma20)} MA50:{int(ma50)}"
+
+    msg=f"#{ticker} {label}\n{'⭐'*stars} ({stars}/5) - {BATCH_LABEL} [{MARKET}]\n"
+    msg+=f"{price_str}\n"
     msg+=f"Vol Jual: {vol:.1f}x RSI: {int(rsi)}\n"
     msg+=f"Aksi: Jual Sesi 1 Besok"
     return {"msg": msg, "stars": stars, "retry": retry}
@@ -87,13 +104,12 @@ def main():
     elapsed=time.time()-start
 
     if not results:
-        # Kalau gak ada yang SELL, diam aja biar gak berisik (atau kirim log kalau mau)
-        print(f"{BATCH_LABEL} - Tidak ada SELL signal")
+        print(f"{BATCH_LABEL} [{MARKET}] - Tidak ada SELL signal")
         return
 
-    header=f"⚠️ EXIT ALERT V10.1 {datetime.now():%d %b %H:%M}\n{BATCH_LABEL} | {TICKER_FILE}\nFilter: Bintang 3+ | Top 10\n\n"
+    header=f"⚠️ EXIT ALERT V11 {datetime.now():%d %b %H:%M}\n{BATCH_LABEL} | {TICKER_FILE} | Market:{MARKET}\nFilter: Bintang 3+ | Top 10\n\n"
     body="\n\n".join([r["msg"] for r in results])
-    footer=f"\n\n━━━━━━━━━━━━━━━━\n📊 Total Cek: {len(tickers)} | SELL: {len(results)}\n🔁 Retry 3x: {total_retry} | ⏱️ {elapsed:.1f}s | Maks: 5 Bintang"
+    footer=f"\n\n━━━━━━━━━━━━━━━━\n📊 Total Cek: {len(tickers)} | SELL: {len(results)}\n🔁 Retry 3x: {total_retry} | ⏱️ {elapsed:.1f}s | Market:{MARKET}"
     send(header+body+footer)
 
 if __name__=="__main__": main()
