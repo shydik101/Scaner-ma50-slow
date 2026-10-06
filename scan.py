@@ -17,7 +17,6 @@ TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 WIB = timezone(timedelta(hours=7))
 
-# === LABEL TYPE ===
 if "batch1" in TICKER_FILE.lower():
     TYPE_LABEL = "🔵 BIGCAPS"
 elif "batch2" in TICKER_FILE.lower():
@@ -50,25 +49,28 @@ def load_history():
     except: return {}
 
 def save_history_merged(history, today_tickers):
-    today = datetime.now(WIB).strftime("%d-%m-%Y")
+    now_wib = datetime.now(WIB)
+    today = now_wib.strftime("%d-%m-%Y")
     existing = history.get(today, [])
     merged = sorted(list(set(existing + today_tickers)))
     history[today] = merged
-    cutoff = datetime.now(WIB) - timedelta(days=7)
+    cutoff = now_wib - timedelta(days=7)
     def parse(k):
-        try: return datetime.strptime(k, "%d-%m-%Y")
+        try: dt = datetime.strptime(k, "%d-%m-%Y")
         except:
-            try: return datetime.strptime(k, "%Y-%m-%d")
+            try: dt = datetime.strptime(k, "%Y-%m-%d")
             except: return cutoff
+        return dt.replace(tzinfo=WIB)
     history = {k:v for k,v in history.items() if parse(k) >= cutoff}
     with open(HISTORY_FILE, 'w') as f: json.dump(history, f, indent=2)
 
 def count_streak(history, ticker):
     def parse(k):
-        try: return datetime.strptime(k, "%d-%m-%Y")
+        try: dt = datetime.strptime(k, "%d-%m-%Y")
         except:
-            try: return datetime.strptime(k, "%Y-%m-%d")
-            except: return datetime.min
+            try: dt = datetime.strptime(k, "%Y-%m-%d")
+            except: return datetime.min.replace(tzinfo=WIB)
+        return dt.replace(tzinfo=WIB)
     dates = sorted(history.keys(), key=parse, reverse=True)
     streak = 0
     for d in dates:
@@ -122,6 +124,9 @@ def analyze(ticker):
 def main():
     start=time.time()
     now_wib = datetime.now(WIB)
+    if not os.path.exists(TICKER_FILE):
+        send(f"⚠️ {TYPE_LABEL} File {TICKER_FILE} tidak ada")
+        return
     with open(TICKER_FILE) as f: tickers=[x.strip() for x in f if x.strip() and not x.startswith("#")]
     history=load_history()
     results=[]
@@ -137,7 +142,7 @@ def main():
     if not results:
         send(f"🔍 *{TYPE_LABEL} - {BATCH_LABEL}* {now_wib:%d %b %H:%M WIB} [{MARKET}]\nTidak ada sinyal Bintang 3+ hari ini.")
         return
-    header = f"🔥 *SCAN BUY {TYPE_LABEL} V11.6*\n{now_wib:%d %b %H:%M WIB} | Market: {MARKET} | {BATCH_LABEL}\nFilter: Bintang 3+ | RR ATR Dinamis\n"
+    header = f"🔥 *SCAN BUY {TYPE_LABEL} V11.8 FIX*\n{now_wib:%d %b %H:%M WIB} | Market: {MARKET} | {BATCH_LABEL}\n"
     body_lines=[]
     for i, r in enumerate(results, 1):
         streak=count_streak(history, r["ticker"])
