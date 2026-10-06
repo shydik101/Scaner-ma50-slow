@@ -1,22 +1,105 @@
-name: Weekly Market Check (QQQ + IDX)
+import requests, os, pandas as pd
 
-on:
-  schedule:
-    - cron: '0 0 * * 0' # Minggu 00:00 UTC = 07:00 WIB
-  workflow_dispatch: # bisa test manual dari tab Actions
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+WORKER = os.getenv("WORKER_URL", "https://yahoo-proxy.rizalmawardi766.workers.dev")
 
-jobs:
-  weekly-check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install deps
-        run: pip install yfinance pandas requests
-      - name: Run weekly check
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python tools/weekly_market_check.py
+def get_data(ticker):
+    try:
+        url = f"{WORKER}/v8/finance/chart/{ticker}?range=2y&interval=1d"
+        r = requests.get(url, timeout=20)
+        j = r.json()
+        closes = j['chart']['result'][0]['indicators']['quote'][0]['close']
+        df = pd.Series([c for c in closes if c is not None])
+        price = float(df.iloc[-1])
+        ma50 = float(df.rolling(50).mean().iloc[-1])
+        ma200 = float(df.rolling(200).mean().iloc[-1])
+        delta = df.diff()
+        gain = delta.where(delta > 0, 0).rolling(14).mean()
+        loss = -delta.where(delta < 0, 0).rolling(14).mean()
+        rsi = 100 - (100 / (1 + gain/loss))
+        rsi_last = float(rsi.iloc[-1])
+
+        if price < ma200:
+            st, emoji = "BAHAYA", "🔴"
+        elif price < ma50:
+            st, emoji = "DISKON", "🟡"
+        else:
+            st, emoji = "AMAN", "🟢"
+        return price, ma50, ma200, rsi_last, st, emoji
+    except Exception as e:
+        return None, None, None, None, f"Error {e}", "⚪"
+
+def fmt_price(ticker, price):
+    if "JK" in ticker or ticker == "^JKSE":
+        return f"Rp{price:,.0f}"
+    if ticker == "IDR=X":
+        return f"Rp{price:,.0f}"
+    if ticker == "^TNX":
+        return f"{price:.2f}%"
+    return f"${price:.2f}"
+
+def send_telegram(text):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    requests.post(url, json={"chat_id": CHAT_ID, "text": text, "parse_mode": "Markdown"})
+
+# Ambil data
+qqq = get_data("QQQ")
+ihsg = get_data("^JKSE")
+bmri = get_data("BMRI.JK")
+tlkm = get_data("TLKM.JK")
+asii = get_data("ASII.JK")
+us10y = get_data("^TNX")
+usdidr = get_data("IDR=X")
+
+# Build pesan cantik
+msg = f"""
+📈 *WEEKLY MARKET CHECK*
+Minggu, 07:00 WIB | Long Term
+
+━━━━━━━━━━━━━━━━━━
+*🇺🇸 US MARKET*
+━━━━━━━━━━━━━━━━━━
+*QQQ* {qqq[5]} *{qqq[4]}*
+`Price : {fmt_price('QQQ', qqq[0])}`
+`MA50 : {fmt_price('QQQ', qqq[1])} | MA200: {fmt_price('QQQ', qqq[2])}`
+`RSI : {qqq[3]:.0f}`
+
+US10Y Yield: *{fmt_price('^TNX', us10y[0])}* {us10y[5]}
+
+━━━━━━━━━━━━━━━━━━
+*🇮🇩 INDONESIA MARKET*
+━━━━━━━━━━━━━━━━━━
+*IHSG* {ihsg[5]} *{ihsg[4]}*
+`{fmt_price('^JKSE', ihsg[0])} | MA200: {fmt_price('^JKSE', ihsg[2])}`
+
+*BMRI* {bmri[5]} {bmri[4]}
+`{fmt_price('BMRI.JK', bmri[0])} | MA200: {fmt_price('BMRI.JK', bmri[2])} | RSI {bmri[3]:.0f}`
+
+*TLKM* {tlkm[5]} {tlkm[4]}
+`{fmt_price('TLKM.JK', tlkm[0])} | MA200: {fmt_price('TLKM.JK', tlkm[2])} | RSI {tlkm[3]:.0f}`
+
+*ASII* {asii[5]} {asii[4]}
+`{fmt_price('ASII.JK', asii[0])} | MA200: {fmt_price('ASII.JK', asii[2])} | RSI {asii[3]:.0f}`
+
+USD/IDR: *{fmt_price('IDR=X', usdidr[0])}*
+
+━━━━━━━━━━━━━━━━━━
+*KESIMPULAN*
+"""
+
+# Logic kesimpulan
+bahaya = sum(1 for x in [qqq, ihsg, bmri, tlkm, asii] if x[4] == "BAHAYA")
+diskon = sum(1 for x in [qqq, ihsg, bmri, tlkm, asii] if x[4] == "DISKON")
+
+if bahaya > 0:
+    msg += "⚠️ *WASPADA* - Ada yang jebol MA200, tahan cash lebih banyak.\n"
+elif diskon > 0:
+    msg += "🟡 *SIAP BUY DIP* - Ada yang diskon di bawah MA50, cicil pelan.\n"
+else:
+    msg += "🟢 *AMAN - HOLD* - Semua di atas MA200, trend long term masih bagus.\n"
+
+msg += "_Bukan ajakan jual beli, hanya monitoring mingguan._"
+
+print(msg)
+send_telegram(msg)
