@@ -3,7 +3,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 import argparse
 
-# === ARGS BARU MULTI MARKET ===
 parser = argparse.ArgumentParser()
 parser.add_argument('--market', default=os.getenv("MARKET", "IDX"), help='IDX or US')
 parser.add_argument('--ticker_file', default=os.getenv("TICKER_FILE", "tickers-batch1.txt"))
@@ -17,18 +16,15 @@ PROXY_URL = "https://yahoo-proxy.rizalmawardi766.workers.dev"
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-# History beda IDX vs US biar gak kecampur
 HISTORY_FILE = "history_etf.json" if MARKET == "US" else "history.json"
 
-# Gorengan detection tetap jalan
 IS_GORENGAN = "batch2" in TICKER_FILE.lower() or "gorengan" in BATCH_LABEL.lower() or "ETF" in TICKER_FILE.upper()
-# Untuk US ETF kita buat lebih ketat kayak gorengan
 if MARKET == "US":
     IS_GORENGAN = True
 
 def send(msg):
     if TOKEN and CHAT_ID:
-        try: requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", json={"chat_id": CHAT_ID, "text": msg}, timeout=20)
+        try: requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", json={"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}, timeout=20)
         except: pass
     print(msg)
 
@@ -46,9 +42,14 @@ def get_df(ticker):
 def analyze_exit(ticker):
     df, retry = get_df(ticker)
     if df is None: return None
-    df["MA20"]=df["close"].rolling(20).mean(); df["MA50"]=df["close"].rolling(50).mean()
-    df["vol_avg"]=df["vol"].rolling(20).mean(); df["vol_ratio"]=df["vol"]/df["vol_avg"]
-    delta=df["close"].diff(); gain=delta.where(delta>0,0).rolling(14).mean(); loss=-delta.where(delta<0,0).rolling(14).mean()
+    df["MA20"]=df["close"].rolling(20).mean()
+    df["MA50"]=df["close"].rolling(50).mean()
+    df["vol_avg"]=df["vol"].rolling(20).mean()
+    df["vol_ratio"]=df["vol"]/df["vol_avg"]
+    df["ATR"]=df["close"].diff().abs().rolling(14).mean()
+    delta=df["close"].diff()
+    gain=delta.where(delta>0,0).rolling(14).mean()
+    loss=-delta.where(delta<0,0).rolling(14).mean()
     df["RSI"]=100-(100/(1+gain/loss))
 
     last=df.iloc[-1]
@@ -56,6 +57,13 @@ def analyze_exit(ticker):
     c, ma20, ma50 = last["close"], last["MA20"], last["MA50"]
     rsi=last["RSI"] if not pd.isna(last["RSI"]) else 50
     vol=last["vol_ratio"] if not pd.isna(last["vol_ratio"]) else 1.0
+    atr=last["ATR"] if not pd.isna(last["ATR"]) else c*0.02
+    atr_pct = (atr/c*100) if c>0 else 0
+
+    # SL Dinamis untuk referensi kenapa jebol
+    sl_hit = c - (atr*1.5)
+    sl_hit = max(c*0.93, min(c*0.97, sl_hit)) # batas 3-7%
+    loss_pct = (c - sl_hit)/c*100
 
     if IS_GORENGAN:
         if c < ma20 and c < ma50 and vol >= 2.0:
@@ -78,15 +86,17 @@ def analyze_exit(ticker):
         else:
             return None
 
-    # Format harga beda IDX vs US
     if MARKET == "US":
         price_str = f"${c:.2f} MA20:${ma20:.2f} MA50:${ma50:.2f}"
+        sl_str = f"SL Ref: ${sl_hit:.2f} (-{loss_pct:.1f}%)"
     else:
         price_str = f"Price:{int(c)} MA20:{int(ma20)} MA50:{int(ma50)}"
+        sl_str = f"SL Ref: {int(sl_hit)} (-{loss_pct:.1f}%)"
 
     msg=f"#{ticker} {label}\n{'⭐'*stars} ({stars}/5) - {BATCH_LABEL} [{MARKET}]\n"
     msg+=f"{price_str}\n"
-    msg+=f"Vol Jual: {vol:.1f}x RSI: {int(rsi)}\n"
+    msg+=f"Vol Jual: {vol:.1f}x RSI: {int(rsi)} ATR:{atr_pct:.1f}%\n"
+    msg+=f"{sl_str}\n"
     msg+=f"Aksi: Jual Sesi 1 Besok"
     return {"msg": msg, "stars": stars, "retry": retry}
 
@@ -107,7 +117,7 @@ def main():
         print(f"{BATCH_LABEL} [{MARKET}] - Tidak ada SELL signal")
         return
 
-    header=f"⚠️ EXIT ALERT V11 {datetime.now():%d %b %H:%M}\n{BATCH_LABEL} | {TICKER_FILE} | Market:{MARKET}\nFilter: Bintang 3+ | Top 10\n\n"
+    header=f"⚠️ *EXIT ALERT V11.4 PRO*\n{datetime.now():%d %b %H:%M} | {BATCH_LABEL} | {TICKER_FILE} | Market:{MARKET}\nFilter: Bintang 3+ | RR ATR Ref | Top 10\n\n"
     body="\n\n".join([r["msg"] for r in results])
     footer=f"\n\n━━━━━━━━━━━━━━━━\n📊 Total Cek: {len(tickers)} | SELL: {len(results)}\n🔁 Retry 3x: {total_retry} | ⏱️ {elapsed:.1f}s | Market:{MARKET}"
     send(header+body+footer)
