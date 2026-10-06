@@ -11,6 +11,7 @@
     "IATA.JK",
     "INDY.JK",
     "ITMG.JK",
+    "KOCI.JK",
     "MAPI.JK",
     "MDKA.JK",
     "MEDC.JK",
@@ -19,6 +20,7 @@
     "PWON.JK",
     "SIDO.JK",
     "TAXI.JK",
+    "TOWR.JK",
     "TRUE.JK"
   ]
 }
