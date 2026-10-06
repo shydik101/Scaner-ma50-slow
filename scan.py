@@ -2,15 +2,40 @@ import os, requests, pandas as pd, time, json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from collections import defaultdict
+import argparse
 
-TICKER_FILE = os.getenv("TICKER_FILE", "tickers-batch1.txt")
-BATCH_LABEL = os.getenv("BATCH_LABEL", "HYBRID")
+# === ARGS BARU UNTUK ETF ===
+parser = argparse.ArgumentParser()
+parser.add_argument('--market', default=os.getenv("MARKET", "IDX"), help='IDX or US')
+parser.add_argument('--ticker_file', default=os.getenv("TICKER_FILE", "tickers-batch1.txt"))
+args, _ = parser.parse_known_args()
+
+MARKET = args.market.upper()
+TICKER_FILE = args.ticker_file
+BATCH_LABEL = os.getenv("BATCH_LABEL", f"{MARKET}-HYBRID")
+
+# History file beda biar saldo Jepang -75jt & ETF gak kecampur
+if MARKET == "US":
+    HISTORY_FILE = "history_etf.json"
+else:
+    HISTORY_FILE = "history.json"
+
 PROXY_URL = "https://yahoo-proxy.rizalmawardi766.workers.dev"
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-HISTORY_FILE = "history.json"
 
-KINGS = {"BBCA.JK","BBRI.JK","BMRI.JK","BBNI.JK","TLKM.JK","ASII.JK","UNTR.JK","BBTN.JK"}
+# Kings hanya untuk IDX
+KINGS = {"BBCA.JK","BBRI.JK","BMRI.JK","BBNI.JK","TLKM.JK","ASII.JK","UNTR.JK","BBTN.JK"} if MARKET == "IDX" else set()
+
+# Load config markets.json kalau ada
+MARKET_CONFIG = {}
+if os.path.exists("config/markets.json"):
+    try:
+        with open("config/markets.json") as f:
+            MARKET_CONFIG = json.load(f).get(MARKET, {})
+    except: pass
+
+MIN_VOL_RATIO = MARKET_CONFIG.get("min_vol_ratio", 1.5)
 
 def send(msg):
     if TOKEN and CHAT_ID:
@@ -21,6 +46,7 @@ def send(msg):
 def get_df(ticker):
     for attempt in range(3):
         try:
+            # ticker untuk US: SPY, QQQ (tanpa.JK). Untuk IDX: BBCA.JK
             r = requests.get(f"{PROXY_URL}/?ticker={ticker}", timeout=15).json()
             q = r["chart"]["result"][0]["indicators"]["quote"][0]
             df = pd.DataFrame({"close": q["close"], "vol": q["volume"]}).dropna()
@@ -38,20 +64,16 @@ def load_history():
 def save_history(history, today_tickers):
     today = datetime.now().strftime("%Y-%m-%d")
     history[today] = today_tickers
-    # hapus data lebih dari 7 hari
     cutoff = datetime.now() - timedelta(days=7)
     history = {k:v for k,v in history.items() if datetime.strptime(k, "%Y-%m-%d") >= cutoff}
     with open(HISTORY_FILE, 'w') as f: json.dump(history, f, indent=2)
 
 def count_streak(history, ticker):
-    # hitung berapa kali muncul berturut-turut ke belakang dalam 7 hari
-    dates = sorted(history.keys(), reverse=True) # terbaru dulu
+    dates = sorted(history.keys(), reverse=True)
     streak = 0
     for d in dates:
-        if ticker in history[d]:
-            streak += 1
-        else:
-            break # putus kalau ada hari bolong
+        if ticker in history[d]: streak += 1
+        else: break
     return streak
 
 def analyze(ticker):
@@ -81,8 +103,16 @@ def analyze(ticker):
     elif -3<=dist50<=3: label, stars = "NEAR BREAKOUT", 1
     else: label, stars = "WEAK/DOWNTREND", 0
     if stars<3 or score<55: return None
-    lot=int(1000000/c) if c>0 else 0
-    return {"ticker": ticker, "score": score, "label": label, "stars": stars, "c": c, "ma20": ma20, "ma50": ma50, "dist": dist50, "vol": vol, "rsi": rsi, "adx": adx, "lot": lot, "retry": retry}
+
+    # Lot logic beda IDX vs US
+    if MARKET == "US":
+        lot = int(1000/c) if c>0 else 0 # USD lot kecil
+        price_str = f"${c:.2f}"
+    else:
+        lot=int(1000000/c) if c>0 else 0
+        price_str = f"{int(c)}"
+
+    return {"ticker": ticker, "score": score, "label": label, "stars": stars, "c": c, "ma20": ma20, "ma50": ma50, "dist": dist50, "vol": vol, "rsi": rsi, "adx": adx, "lot": lot, "retry": retry, "price_str": price_str}
 
 def main():
     start=time.time()
@@ -96,35 +126,32 @@ def main():
             if r: results.append(r); total_retry+=r["retry"]
     results=sorted(results, key=lambda x:x["score"], reverse=True)[:10]
 
-    # hitung streak & simpan history hari ini
     today_list=[r["ticker"] for r in results]
     save_history(history, today_list)
-    # reload history yang udah update biar streak hari ini kehitung
     history=load_history()
 
     if not results:
-        send(f"🔍 {BATCH_LABEL} {datetime.now():%d %b %H:%M}\nTidak ada sinyal Bintang 3+ hari ini.\n\n━━━━━━━━\n📊 Total:{len(tickers)} | 🔁 Retry:{total_retry} (3x aktif) | ⏱️ {time.time()-start:.1f}s")
+        send(f"🔍 {BATCH_LABEL} {datetime.now():%d %b %H:%M} [{MARKET}]\nTidak ada sinyal Bintang 3+ hari ini.\n\n━━━━━━━━\n📊 Total:{len(tickers)} | 🔁 Retry:{total_retry} (3x aktif) | ⏱️ {time.time()-start:.1f}s")
         return
 
-    header=f"🔥 SCAN HYBRID V10.1 {datetime.now():%d %b %H:%M}\n{BATCH_LABEL} | {TICKER_FILE}\nFilter: Bintang 3+ | Top 10\n\n"
+    header=f"🔥 SCAN HYBRID V11 {datetime.now():%d %b %H:%M}\n{BATCH_LABEL} | {TICKER_FILE} | Market:{MARKET}\nFilter: Bintang 3+ | Top 10\n\n"
     body_lines=[]
     for i, r in enumerate(results, 1):
         streak=count_streak(history, r["ticker"])
         msg=f"{i}. #{r['ticker']} {r['score']} {r['label']}\n{'⭐'*r['stars']} ({r['stars']}/5)\n"
-        msg+=f"Price:{int(r['c'])} MA20:{int(r['ma20'])} MA50:{int(r['ma50'])} ({r['dist']:+.1f}%)\n"
-        msg+=f"Vol:{r['vol']:.1f}x RSI:{int(r['rsi'])} ADX:{r['adx']} Lot:{r['lot']}\n"
-        msg+=f"Entry:{int(r['c']*0.995)}-{int(r['c']*1.005)} SL:{int(r['c']*0.95)}\n"
-        # BARIS BARU YANG KAMU MAU
-        if streak >= 2:
-            msg+=f"🔁 Muncul {streak}x berturut dalam 7 hari terakhir 🔥"
-        elif streak == 1:
-            msg+=f"🔁 Muncul pertama dalam 7 hari terakhir (New)"
+        if MARKET == "US":
+            msg+=f"Price:{r['price_str']} MA20:{r['ma20']:.2f} MA50:{r['ma50']:.2f} ({r['dist']:+.1f}%)\n"
         else:
-            msg+=f"🔁 Tidak muncul dalam 7 hari terakhir"
+            msg+=f"Price:{int(r['c'])} MA20:{int(r['ma20'])} MA50:{int(r['ma50'])} ({r['dist']:+.1f}%)\n"
+        msg+=f"Vol:{r['vol']:.1f}x RSI:{int(r['rsi'])} ADX:{r['adx']} Lot:{r['lot']}\n"
+        msg+=f"Entry:{r['c']*0.995:.2f}-{r['c']*1.005:.2f} SL:{r['c']*0.95:.2f}\n"
+        if streak >= 2: msg+=f"🔁 Muncul {streak}x berturut dalam 7 hari terakhir 🔥"
+        elif streak == 1: msg+=f"🔁 Muncul pertama dalam 7 hari terakhir (New)"
+        else: msg+=f"🔁 Tidak muncul dalam 7 hari terakhir"
         body_lines.append(msg)
 
     body="\n\n".join(body_lines)
-    footer=f"\n\n━━━━━━━━━━━━━━━━\n📊 Total:{len(tickers)} Lolos:{len(results)}\n🔁 Retry 3x: {total_retry} | ⏱️ {time.time()-start:.1f}s | Maks: 5 Bintang"
+    footer=f"\n\n━━━━━━━━━━━━━━━━\n📊 Total:{len(tickers)} Lolos:{len(results)}\n🔁 Retry 3x: {total_retry} | ⏱️ {time.time()-start:.1f}s | Market:{MARKET}"
     send(header+body+footer)
 
 if __name__=="__main__": main()
