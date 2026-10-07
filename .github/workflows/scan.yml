@@ -1,102 +1,146 @@
-name: Stock Scan Full IDX + US - V11.8.1 Watchlist
+name: Hybrid Scan V11.8.2 WATCHLIST FINAL
 
 on:
   schedule:
-    - cron: '15 2 * * 1-5'   # 09:15 WIB Watchlist
-    - cron: '50 7 * * 1-5'   # 14:50 WIB Gorengan
-    - cron: '10 9 * * 1-5'   # 16:10 WIB Bigcaps+US
-    - cron: '15 9 * * 1-5'   # 16:15 WIB Exit
+    - cron: '0 22 * * 1-5'   # 05:00 WIB Pagi - US ETF
+    - cron: '15 2 * * 1-5'   # 09:15 WIB Pagi - WATCHLIST BMRI
+    - cron: '30 2 * * 5'     # 09:30 WIB Jumat - EXIT BIGCAPS
+    - cron: '50 7 * * 1-5'   # 14:50 WIB Siang - EXIT GORENGAN
+    - cron: '10 9 * * 1-5'   # 16:10 WIB Sore - BUY IDX
   workflow_dispatch:
-    inputs:
-      jobs_to_run:
-        description: 'Jobs: watchlist,gorengan,bigs,us,exit'
-        default: 'all'
+
+permissions:
+  contents: write
 
 jobs:
-  scan-watchlist:
-    name: 👁️ Watchlist BMRI - 09:15 WIB
-    if: github.event.schedule != '' || contains(github.event.inputs.jobs_to_run, 'watchlist') || github.event.inputs.jobs_to_run == 'all'
+  scan-us-etf:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v5
         with: { python-version: '3.11' }
-      - run: pip install -r requirements.txt
-      - name: Run Watchlist
+      - run: pip install requests pandas
+      - name: Cek 05:00 WIB Pagi US ETF
+        id: check_us
+        run: |
+          SCHED="${{ github.event.schedule }}"
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then echo "run=true" >> $GITHUB_OUTPUT
+          elif [ "$SCHED" == "0 22 * * 1-5" ]; then echo "run=true" >> $GITHUB_OUTPUT
+          else echo "run=false" >> $GITHUB_OUTPUT; fi
+      - name: Run BUY+EXIT US ETF
+        if: steps.check_us.outputs.run == 'true'
+        run: |
+          ls -lh tickers*.txt || true
+          python scan.py --market US --ticker_file tickers_etf_us.txt || echo "scan buy us error tapi lanjut"
+          python scan_exit.py --market US --ticker_file tickers_etf_us.txt || echo "scan exit us error tapi lanjut"
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      - name: Save history ETF
+        if: always() && steps.check_us.outputs.run == 'true'
+        run: |
+          git config user.name "scan-bot"
+          git config user.email "bot@github.com"
+          git pull --rebase origin main || true
+          git add history_etf.json history.json -f || true
+          git diff --staged --quiet || git commit -m "history ETF $(date +%Y-%m-%d_%H:%M) [skip ci]" || true
+          git push || true
+
+  scan-watchlist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install requests pandas
+      - name: Cek 09:15 WIB WATCHLIST
+        id: check_wl
+        run: |
+          SCHED="${{ github.event.schedule }}"
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then echo "run=true" >> $GITHUB_OUTPUT
+          elif [ "$SCHED" == "15 2 * * 1-5" ]; then echo "run=true" >> $GITHUB_OUTPUT
+          else echo "run=false" >> $GITHUB_OUTPUT; fi
+      - name: Run WATCHLIST BMRI
+        if: steps.check_wl.outputs.run == 'true'
+        run: python scan_watchlist.py || echo "watchlist error"
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TICKER_FILE: tickers-watchlist.txt
           BATCH_LABEL: WATCHLIST-BMRI
-        run: python scan_watchlist.py
 
-  scan-gorengan:
-    name: 🔴 Gorengan - 14:50 WIB
-    needs: [scan-watchlist]
-    if: always()
+  scan-exit-bigcaps:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v5
         with: { python-version: '3.11' }
-      - run: pip install -r requirements.txt
-      - name: Run Gorengan
+      - run: pip install requests pandas
+      - name: Cek 09:30 WIB Jumat EXIT BIGCAPS
+        id: check
+        run: |
+          SCHED="${{ github.event.schedule }}"
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then echo "run=true" >> $GITHUB_OUTPUT
+          elif [ "$SCHED" == "30 2 * * 5" ]; then echo "run=true" >> $GITHUB_OUTPUT
+          else echo "run=false" >> $GITHUB_OUTPUT; fi
+      - name: Run Exit Bigcaps Jumat
+        if: steps.check.outputs.run == 'true'
+        run: python scan_exit.py --market IDX --ticker_file tickers-batch1.txt || true
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          TICKER_FILE: tickers-batch2.txt
-          BATCH_LABEL: GORENGAN-14:50
-        run: python scan.py
 
-  scan-bigs:
-    name: 🔵 Bigcaps IDX - 16:10 WIB
-    needs: [scan-gorengan]
-    if: always()
+  scan-exit-gorengan:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v5
         with: { python-version: '3.11' }
-      - run: pip install -r requirements.txt
-      - name: Run Bigcaps
+      - run: pip install requests pandas
+      - name: Cek 14:50 WIB Siang EXIT GORENGAN
+        id: check
+        run: |
+          SCHED="${{ github.event.schedule }}"
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then echo "run=true" >> $GITHUB_OUTPUT
+          elif [ "$SCHED" == "50 7 * * 1-5" ]; then echo "run=true" >> $GITHUB_OUTPUT
+          else echo "run=false" >> $GITHUB_OUTPUT; fi
+      - name: Run Exit Gorengan
+        if: steps.check.outputs.run == 'true'
+        run: python scan_exit.py --market IDX --ticker_file tickers-batch2.txt || true
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          TICKER_FILE: tickers-batch1.txt
-          BATCH_LABEL: BIGCAPS-16:10
-        run: python scan.py
 
-  scan-us:
-    name: 🇺🇸 US ETF - 16:10 WIB
-    needs: [scan-gorengan]
-    if: always()
+  scan-buy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v5
         with: { python-version: '3.11' }
-      - run: pip install -r requirements.txt
-      - name: Run US
+      - run: pip install requests pandas
+      - name: Cek 16:10 WIB Sore BUY IDX
+        id: check_buy
+        run: |
+          SCHED="${{ github.event.schedule }}"
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then echo "run=true" >> $GITHUB_OUTPUT
+          elif [ "$SCHED" == "10 9 * * 1-5" ]; then echo "run=true" >> $GITHUB_OUTPUT
+          else echo "run=false" >> $GITHUB_OUTPUT; fi
+      - name: Run BUY BIGCAPS+GORENGAN
+        if: steps.check_buy.outputs.run == 'true'
+        run: |
+          ls -lh tickers*.txt || true
+          python scan.py --market IDX --ticker_file tickers-batch1.txt || echo "batch1 error lanjut"
+          sleep 5
+          python scan.py --market IDX --ticker_file tickers-batch2.txt || echo "batch2 error lanjut"
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          TICKER_FILE: tickers-etf-us.txt
-          MARKET: US
-          BATCH_LABEL: US-ETF-16:10
-        run: python scan.py
-
-  scan-exit:
-    name: 🚪 Exit - 16:15 WIB
-    needs: [scan-bigs, scan-us]
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v5
-        with: { python-version: '3.11' }
-      - run: pip install -r requirements.txt
-      - name: Run Exit
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python scan_exit.py
+      - name: Save history IDX
+        if: always() && steps.check_buy.outputs.run == 'true'
+        run: |
+          git config user.name "scan-bot"
+          git config user.email "bot@github.com"
+          git pull --rebase origin main || true
+          git add history.json history_etf.json -f || true
+          git diff --staged --quiet || git commit -m "history IDX $(date +%Y-%m-%d_%H:%M) [skip ci]" || true
+          git push || true
