@@ -1,9 +1,9 @@
-name: Hybrid Scan V11.8.2 WATCHLIST FINAL
+name: Hybrid Scan V11.9.1 BANDAR MATRIX FINAL
 
 on:
   schedule:
     - cron: '0 22 * * 1-5'   # 05:00 WIB Pagi - US ETF
-    - cron: '15 2 * * 1-5'   # 09:15 WIB Pagi - WATCHLIST BMRI
+    - cron: '15 2 * * 1-5'   # 09:15 WIB Pagi - WATCHLIST BMRI BANDAR MATRIX
     - cron: '30 2 * * 5'     # 09:30 WIB Jumat - EXIT BIGCAPS
     - cron: '50 7 * * 1-5'   # 14:50 WIB Siang - EXIT GORENGAN
     - cron: '10 9 * * 1-5'   # 16:10 WIB Sore - BUY IDX
@@ -53,14 +53,14 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.11' }
       - run: pip install requests pandas
-      - name: Cek 09:15 WIB WATCHLIST
+      - name: Cek 09:15 WIB WATCHLIST BANDAR MATRIX
         id: check_wl
         run: |
           SCHED="${{ github.event.schedule }}"
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then echo "run=true" >> $GITHUB_OUTPUT
           elif [ "$SCHED" == "15 2 * * 1-5" ]; then echo "run=true" >> $GITHUB_OUTPUT
           else echo "run=false" >> $GITHUB_OUTPUT; fi
-      - name: Run WATCHLIST BMRI
+      - name: Run WATCHLIST V11.9.1
         if: steps.check_wl.outputs.run == 'true'
         run: python scan_watchlist.py || echo "watchlist error"
         env:
