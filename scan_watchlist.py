@@ -4,7 +4,6 @@ from datetime import datetime, timedelta, timezone
 
 TICKER_FILE = os.getenv("TICKER_FILE", "tickers-watchlist.txt")
 BATCH_LABEL = os.getenv("BATCH_LABEL", "WATCHLIST")
-HISTORY_FILE = "history.json"
 PROXY_URL = "https://yahoo-proxy.rizalmawardi766.workers.dev"
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
@@ -30,11 +29,38 @@ def get_df(ticker):
         except: time.sleep(1); continue
     return None, 3
 
+def calc_LPM(df):
+    try:
+        last = df.iloc[-1]
+        range_hl = last["high"]-last["low"] if last["high"]!=last["low"] else 1
+        close_pos = (last["close"]-last["low"])/range_hl*100
+        akum_candle = (df.tail(20)["close"] > df.tail(20)["open"]).sum() / 20 * 100
+        ma_score = 50 if last["close"] > last["MA20"] else -50
+        lpm = (close_pos * 0.4 + akum_candle * 0.3 + (ma_score+50) * 0.3) - 50
+        return lpm
+    except: return 0
+
+def calc_INTENSITY(df):
+    try:
+        vol_avg_60 = df["vol"].rolling(60).mean().iloc[-1]
+        vol_std_60 = df["vol"].rolling(60).std().iloc[-1]
+        vol_now = df["vol"].iloc[-1]
+        z = (vol_now - vol_avg_60) / vol_std_60 if vol_std_60 and vol_std_60>0 else 0
+        ratio = vol_now / vol_avg_60 if vol_avg_60>0 else 1
+        return z, ratio
+    except: return 0, 1
+
+def calc_ROTATION(df):
+    try:
+        vol_20_sum = df["vol"].tail(20).sum()
+        vol_60_avg = df["vol"].rolling(60).mean().iloc[-1] * 20
+        return vol_20_sum / vol_60_avg if vol_60_avg and vol_60_avg>0 else 1
+    except: return 1
+
 def analyze_watchlist(ticker):
     df, retry = get_df(ticker)
     if df is None: return None
-    df["MA20"]=df["close"].rolling(20).mean(); df["MA50"]=df["close"].rolling(50).mean()
-    df["MA200"]=df["close"].rolling(200).mean()
+    df["MA20"]=df["close"].rolling(20).mean(); df["MA50"]=df["close"].rolling(50).mean(); df["MA200"]=df["close"].rolling(200).mean()
     df["vol_avg"]=df["vol"].rolling(20).mean(); df["vol_ratio"]=df["vol"]/df["vol_avg"]
     df["ATR"]=df["close"].diff().abs().rolling(14).mean()
     delta=df["close"].diff(); gain=delta.where(delta>0,0).rolling(14).mean(); loss=-delta.where(delta<0,0).rolling(14).mean()
@@ -45,59 +71,69 @@ def analyze_watchlist(ticker):
     atr, vol, rsi, adx = last["ATR"], last["vol_ratio"], last["RSI"], int(last["ADX"])
     if pd.isna(ma20) or pd.isna(ma50): return None
 
-    # Support Resistance ala V11.8 Pro
-    dist_ma20 = (c-ma20)/ma20*100; dist_ma50 = (c-ma50)/ma50*100; dist_ma200 = (c-ma200)/ma200*100 if not pd.isna(ma200) else 0
-    pivot = (h+l+last["close"])/3
-    s1 = 2*pivot - h; s2 = pivot - (h - l); r1 = 2*pivot - l; r2 = pivot + (h - l)
+    dist20 = (c-ma20)/ma20*100; dist50 = (c-ma50)/ma50*100; dist200 = (c-ma200)/ma200*100 if not pd.isna(ma200) else 0
+    pivot = (h+l+c)/3; s1 = 2*pivot - h; s2 = pivot - (h - l); r1 = 2*pivot - l; r2 = pivot + (h - l)
+    range_hl = h-l if h!=l else 1; close_pos = (c-l)/range_hl*100; upper_wick = (h-max(c,o))/range_hl*100
 
-    # Scoring khusus watchlist (lebih longgar dari scan buy)
     score = 0
     if c > ma20: score+=20
     if ma20 > ma50: score+=15
-    if rsi >= 35 and rsi <= 65: score+=15
+    if 35 <= rsi <= 65: score+=15
     if vol >= 1.2: score+=10
     if adx > 20: score+=10
 
-    # Label trend
     if c > ma20 and c > ma50 and c > ma200: label, stars = "UPTREND KUAT", 4
     elif c > ma20 and ma20 > ma50: label, stars = "UPTREND", 3
-    elif c > ma20: label, stars = "NEAR BREAKOUT MA20", 2
-    elif abs(dist_ma50) <= 4: label, stars = "NEMPEL MA50", 1
+    elif c > ma20: label, stars = "NEAR BREAKOUT", 2
+    elif abs(dist50) <= 4: label, stars = "NEMPEL MA50", 1
     else: label, stars = "DOWNTREND / AKUMULASI", 0
 
-    # Bandar quick check
-    range_hl = h-l if h!=l else 1
-    close_pos = (c-l)/range_hl*100
-    upper_wick = (h-max(c,o))/range_hl*100
-    if close_pos >=80 and vol>=1.8 and upper_wick<20: bandar="🟢 AKUM BANDAR"
-    elif upper_wick>40 and vol>=1.8: bandar="🔴 DISTRIBUSI"
-    else: bandar="⚪ NETRAL"
+    if close_pos >=80 and vol>=1.8 and upper_wick<20: bandar="AKUMULASI"
+    elif upper_wick>40 and vol>=1.8: bandar="DISTRIBUSI"
+    else: bandar="NETRAL"
 
-    # SL TP RR
-    sl = c - max(c*0.04, atr*1.5)
-    tp1 = c + atr*1.5; tp2 = c + atr*2.5
-    rr1 = (tp1-c)/(c-sl) if c>sl else 0
+    sl = c - max(c*0.04, atr*1.5); tp1 = c + atr*1.5; tp2 = c + atr*2.5; rr = (tp1-c)/(c-sl) if c>sl else 0
 
-    # Keputusan V11.8 style
-    if stars >=3 and vol>=1.5 and rsi>=50: keputusan = "✅ GAS CICIL / BUY"
-    elif stars ==2 and vol>=1.5: keputusan = "🟡 CICIL 30% BAWAH"
-    elif stars <=1 and rsi <40: keputusan = "⏳ TUNGGU PANTULAN - JANGAN AVERAGE DOWN"
-    else: keputusan = "👀 WATCH - BELUM VALID"
+    if stars >=3 and vol>=1.5 and rsi>=50: keputusan = "GAS CICIL / BUY"
+    elif stars ==2 and vol>=1.5: keputusan = "CICIL 30% BAWAH"
+    elif stars <=1 and rsi <40: keputusan = "TUNGGU PANTULAN"
+    else: keputusan = "WATCH"
+
+    # Bandar Matrix
+    lpm = calc_LPM(df); z_int, ratio_int = calc_INTENSITY(df); rot = calc_ROTATION(df)
+
+    if lpm > 20: lpm_txt = f"Akumulasi +{lpm:.0f}"
+    elif lpm < -20: lpm_txt = f"Distribusi {lpm:.0f}"
+    else: lpm_txt = f"Netral {lpm:.0f}"
+
+    if z_int > 3: int_txt = f"Sangat Aktif {ratio_int:.1f}x"
+    elif z_int > 2: int_txt = f"Mulai Aktif {ratio_int:.1f}x"
+    elif z_int > 1: int_txt = f"Agak Aktif {ratio_int:.1f}x"
+    else: int_txt = f"Sepi {ratio_int:.1f}x"
+
+    if rot > 2.5: rot_txt = f"Ekstra Rame {rot:.1f}x"
+    elif rot > 1.5: rot_txt = f"Rame {rot:.1f}x"
+    elif rot > 1.2: rot_txt = f"Agak Rame {rot:.1f}x"
+    else: rot_txt = f"Sepi {rot:.1f}x"
+
+    if lpm > 20 and z_int > 2 and 1.2 <= rot <= 2.5: konf = "TERKONFIRMASI - 3 Sinyal Kompak"
+    elif lpm < -20 and z_int > 2 and rot > 2.0: konf = "DISTRIBUSI TERKONFIRMASI"
+    else: konf = "Belum Kompak"
 
     return {
         "ticker": ticker.replace(".JK",""), "c": c, "ma20": ma20, "ma50": ma50, "ma200": ma200,
-        "dist20": dist_ma20, "dist50": dist_ma50, "dist200": dist_ma200,
-        "vol": vol, "rsi": rsi, "adx": adx, "atr": atr,
+        "dist20": dist20, "dist50": dist50, "dist200": dist200,
+        "vol": vol, "rsi": rsi, "adx": adx, "atr": atr, "close_pos": close_pos,
         "s1": s1, "s2": s2, "r1": r1, "r2": r2, "pivot": pivot,
         "label": label, "stars": stars, "score": score, "bandar": bandar,
-        "close_pos": close_pos, "sl": sl, "tp1": tp1, "tp2": tp2, "rr": rr1,
-        "keputusan": keputusan
+        "sl": sl, "tp1": tp1, "tp2": tp2, "rr": rr, "keputusan": keputusan,
+        "lpm": lpm, "lpm_txt": lpm_txt, "z_int": z_int, "ratio_int": ratio_int,
+        "int_txt": int_txt, "rot": rot, "rot_txt": rot_txt, "konf": konf
     }
 
 def main():
     now_wib = datetime.now(WIB)
     if not os.path.exists(TICKER_FILE):
-        # Auto create kalau belum ada
         with open(TICKER_FILE, 'w') as f: f.write("BMRI.JK\n")
     with open(TICKER_FILE) as f: tickers=[x.strip() for x in f if x.strip() and not x.startswith("#")]
     results=[]
@@ -106,24 +142,31 @@ def main():
         for fu in as_completed(futs):
             r=fu.result()
             if r: results.append(r)
+
     if not results:
-        send(f"👁️ *WATCHLIST RADAR V11.8.1* {now_wib:%d %b %H:%M WIB}\nGak ada data")
+        send(f"*WATCHLIST RADAR V11.9.1* {now_wib:%d %b %H:%M WIB}\nTidak ada data")
         return
-    header=f"👁️ *WATCHLIST RADAR V11.8.1 PRO*\n{now_wib:%d %b %H:%M WIB} | {BATCH_LABEL}\nDetail BMRI & Watchlist\n"
+
+    header=f"*WATCHLIST RADAR V11.9.1 - BANDAR MATRIX*\n{now_wib:%d %b %H:%M WIB} | {BATCH_LABEL}\n\n"
     lines=[]
     for r in results:
-        stars="⭐"*r["stars"] if r["stars"]>0 else "💤"
-        msg=f"━━━━━━━━━━━━━━━━━━\n*#{r['ticker']}* — {r['label']} {stars} Skor:{r['score']}\n"
-        msg+=f"💰 {int(r['c'])} | MA20:{int(r['ma20'])} ({r['dist20']:+.1f}%) MA50:{int(r['ma50'])} ({r['dist50']:+.1f}%) MA200:{int(r['ma200'])} ({r['dist200']:+.1f}%)\n"
-        msg+=f"📊 Vol:{r['vol']:.1f}x Pos:{r['close_pos']:.0f}% RSI:{int(r['rsi'])} ADX:{r['adx']} ATR:{r['atr']:.0f}\n"
-        msg+=f"{r['bandar']} | Pivot:{r['pivot']:.0f}\n"
-        msg+=f"🛡️ S2:{r['s2']:.0f} S1:{r['s1']:.0f} | 🎯 R1:{r['r1']:.0f} R2:{r['r2']:.0f}\n"
-        msg+=f"SL:{r['sl']:.0f} TP1:{r['tp1']:.0f} TP2:{r['tp2']:.0f} RR 1:{r['rr']:.2f}\n"
-        msg+=f"📋 *{r['keputusan']}*"
-        # Analisa khusus BMRI sampai Jumat
+        star_txt="⭐"*r["stars"] if r["stars"]>0 else "—"
+        # Pesan gabung profesional
+        msg = (
+            f"*{r['ticker']}* | {r['label']} {star_txt} | Skor {r['score']}\n"
+            f"Harga {int(r['c'])} | MA20 {int(r['ma20'])} ({r['dist20']:+.1f}%) | MA50 {int(r['ma50'])} ({r['dist50']:+.1f}%) | MA200 {int(r['ma200'])} ({r['dist200']:+.1f}%)\n"
+            f"Vol {r['vol']:.1f}x | Pos {r['close_pos']:.0f}% | RSI {int(r['rsi'])} | ADX {r['adx']} | ATR {r['atr']:.0f}\n"
+            f"Bandar {r['bandar']} | Pivot {r['pivot']:.0f} | S1 {r['s1']:.0f} S2 {r['s2']:.0f} | R1 {r['r1']:.0f} R2 {r['r2']:.0f}\n"
+            f"SL {r['sl']:.0f} | TP1 {r['tp1']:.0f} | TP2 {r['tp2']:.0f} | RR 1:{r['rr']:.2f}\n"
+            f"\n"
+            f"Bandar Matrix: LPM {r['lpm_txt']} | Intensity {r['int_txt']} | Rotation {r['rot_txt']}\n"
+            f"Konfirmasi: *{r['konf']}* | Keputusan: *{r['keputusan']}*\n"
+        )
         if r['ticker']=="BMRI":
-            msg+=f"\n\n*Ramalan BMRI s/d Jumat:*\nBase: 4050-4100, Bear case 3990-4020 jebol = 3950, Bull case close >4130 = NEAR BREAKOUT"
+            msg+=f"_Forecast Jumat: Base 4050-4100 | Bear <4020 -> 3950 | Bull >4130 = Near Breakout_\n"
+        msg+="──────────────────"
         lines.append(msg)
+
     send(header + "\n".join(lines))
 
 if __name__=="__main__": main()
