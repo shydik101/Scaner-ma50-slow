@@ -1,28 +1,4 @@
 {
-  "06-10-2026": [
-    "AMMN.JK",
-    "ANTM.JK",
-    "AVIA.JK",
-    "BNGA.JK",
-    "BSSR.JK",
-    "BTEK.JK",
-    "BYAN.JK",
-    "GSMF.JK",
-    "IATA.JK",
-    "INDY.JK",
-    "ITMG.JK",
-    "KOCI.JK",
-    "MAPI.JK",
-    "MDKA.JK",
-    "MEDC.JK",
-    "MEGA.JK",
-    "MPMX.JK",
-    "PWON.JK",
-    "SIDO.JK",
-    "TAXI.JK",
-    "TOWR.JK",
-    "TRUE.JK"
-  ],
   "07-10-2026": [
     "BELI.JK",
     "BIPP.JK",
@@ -61,5 +37,12 @@
     "BANK.JK",
     "CPIN.JK",
     "ITMG.JK"
+  ],
+  "13-10-2026": [
+    "BSSR.JK",
+    "BTPS.JK",
+    "CTRA.JK",
+    "ITMG.JK",
+    "SMRA.JK"
   ]
 }
