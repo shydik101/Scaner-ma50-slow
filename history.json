@@ -1,12 +1,4 @@
 {
-  "07-10-2026": [
-    "BELI.JK",
-    "BIPP.JK",
-    "CMRY.JK",
-    "DCII.JK",
-    "INDY.JK",
-    "PWON.JK"
-  ],
   "08-10-2026": [
     "KLBF.JK",
     "MCAS.JK",
@@ -44,5 +36,21 @@
     "CTRA.JK",
     "ITMG.JK",
     "SMRA.JK"
+  ],
+  "14-10-2026": [
+    "ACES.JK",
+    "ASII.JK",
+    "BIPP.JK",
+    "BUKA.JK",
+    "CBDK.JK",
+    "ELSA.JK",
+    "KBLV.JK",
+    "MAPI.JK",
+    "MCAS.JK",
+    "MEDC.JK",
+    "MYOR.JK",
+    "PANI.JK",
+    "SIDO.JK",
+    "UNVR.JK"
   ]
 }
