@@ -1,9 +1,4 @@
 {
-  "08-10-2026": [
-    "KLBF.JK",
-    "MCAS.JK",
-    "TAXI.JK"
-  ],
   "09-10-2026": [
     "ADMR.JK",
     "ADRO.JK",
@@ -52,5 +47,12 @@
     "PANI.JK",
     "SIDO.JK",
     "UNVR.JK"
+  ],
+  "15-10-2026": [
+    "ACES.JK",
+    "CHEM.JK",
+    "CMRY.JK",
+    "SQMI.JK",
+    "UNTR.JK"
   ]
 }
