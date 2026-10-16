@@ -1,25 +1,4 @@
 {
-  "09-10-2026": [
-    "ADMR.JK",
-    "ADRO.JK",
-    "AKRA.JK",
-    "AVIA.JK",
-    "BTPS.JK",
-    "BUVA.JK",
-    "CMRY.JK",
-    "DEWA.JK",
-    "ERAA.JK",
-    "FWCT.JK",
-    "IATA.JK",
-    "INDF.JK",
-    "INDY.JK",
-    "MDKA.JK",
-    "PACK.JK",
-    "PSAB.JK",
-    "PWON.JK",
-    "SIDO.JK",
-    "UNTR.JK"
-  ],
   "12-10-2026": [
     "BANK.JK",
     "CPIN.JK",
@@ -54,5 +33,6 @@
     "CMRY.JK",
     "SQMI.JK",
     "UNTR.JK"
-  ]
+  ],
+  "16-10-2026": []
 }
