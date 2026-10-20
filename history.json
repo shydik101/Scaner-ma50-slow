@@ -1,11 +1,4 @@
 {
-  "13-10-2026": [
-    "BSSR.JK",
-    "BTPS.JK",
-    "CTRA.JK",
-    "ITMG.JK",
-    "SMRA.JK"
-  ],
   "14-10-2026": [
     "ACES.JK",
     "ASII.JK",
@@ -30,5 +23,17 @@
     "UNTR.JK"
   ],
   "16-10-2026": [],
-  "19-10-2026": []
+  "19-10-2026": [],
+  "20-10-2026": [
+    "ACES.JK",
+    "BEKS.JK",
+    "BELI.JK",
+    "BRPT.JK",
+    "BSSR.JK",
+    "BTPS.JK",
+    "BUKA.JK",
+    "KREN.JK",
+    "PTBA.JK",
+    "PWON.JK"
+  ]
 }
