@@ -1,20 +1,4 @@
 {
-  "14-10-2026": [
-    "ACES.JK",
-    "ASII.JK",
-    "BIPP.JK",
-    "BUKA.JK",
-    "CBDK.JK",
-    "ELSA.JK",
-    "KBLV.JK",
-    "MAPI.JK",
-    "MCAS.JK",
-    "MEDC.JK",
-    "MYOR.JK",
-    "PANI.JK",
-    "SIDO.JK",
-    "UNVR.JK"
-  ],
   "15-10-2026": [
     "ACES.JK",
     "CHEM.JK",
@@ -35,5 +19,15 @@
     "KREN.JK",
     "PTBA.JK",
     "PWON.JK"
+  ],
+  "21-10-2026": [
+    "AADI.JK",
+    "BBMD.JK",
+    "BNGA.JK",
+    "BUKA.JK",
+    "CTRA.JK",
+    "ERAA.JK",
+    "MPMX.JK",
+    "SMRA.JK"
   ]
 }
