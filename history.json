@@ -1,11 +1,4 @@
 {
-  "15-10-2026": [
-    "ACES.JK",
-    "CHEM.JK",
-    "CMRY.JK",
-    "SQMI.JK",
-    "UNTR.JK"
-  ],
   "16-10-2026": [],
   "19-10-2026": [],
   "20-10-2026": [
@@ -29,5 +22,20 @@
     "ERAA.JK",
     "MPMX.JK",
     "SMRA.JK"
+  ],
+  "22-10-2026": [
+    "BBNI.JK",
+    "BSSR.JK",
+    "BTEK.JK",
+    "ELSA.JK",
+    "FWCT.JK",
+    "GEMS.JK",
+    "ITMG.JK",
+    "MBAP.JK",
+    "MEDC.JK",
+    "MEGA.JK",
+    "MPMX.JK",
+    "PTBA.JK",
+    "SIDO.JK"
   ]
 }
