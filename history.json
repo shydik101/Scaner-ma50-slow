@@ -1,14 +1,4 @@
 {
-  "21-10-2026": [
-    "AADI.JK",
-    "BBMD.JK",
-    "BNGA.JK",
-    "BUKA.JK",
-    "CTRA.JK",
-    "ERAA.JK",
-    "MPMX.JK",
-    "SMRA.JK"
-  ],
   "22-10-2026": [
     "BBNI.JK",
     "BSSR.JK",
@@ -46,5 +36,13 @@
     "ASII.JK",
     "ELSA.JK",
     "JSMR.JK"
+  ],
+  "28-10-2026": [
+    "ASII.JK",
+    "BBNI.JK",
+    "MBAP.JK",
+    "MPMX.JK",
+    "NISP.JK",
+    "PTBA.JK"
   ]
 }
