@@ -1,15 +1,4 @@
 {
-  "23-10-2026": [
-    "AADI.JK",
-    "AVIA.JK",
-    "BTPS.JK",
-    "ITMG.JK",
-    "JSMR.JK",
-    "SDMU.JK",
-    "SQMI.JK",
-    "TLKM.JK",
-    "UNTR.JK"
-  ],
   "26-10-2026": [
     "BBMD.JK",
     "BMRI.JK",
@@ -30,5 +19,12 @@
     "NISP.JK",
     "PTBA.JK"
   ],
-  "29-10-2026": []
+  "29-10-2026": [],
+  "30-10-2026": [
+    "AADI.JK",
+    "ASII.JK",
+    "BTPS.JK",
+    "MPMX.JK",
+    "PTBA.JK"
+  ]
 }
