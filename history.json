@@ -1,11 +1,4 @@
 {
-  "30-10-2026": [
-    "AADI.JK",
-    "ASII.JK",
-    "BTPS.JK",
-    "MPMX.JK",
-    "PTBA.JK"
-  ],
   "03-11-2026": [
     "AADI.JK",
     "ASII.JK",
@@ -16,5 +9,12 @@
   ],
   "05-11-2026": [
     "MBAP.JK"
+  ],
+  "06-11-2026": [
+    "ACES.JK",
+    "ASII.JK",
+    "BBMD.JK",
+    "BREN.JK",
+    "PGAS.JK"
   ]
 }
