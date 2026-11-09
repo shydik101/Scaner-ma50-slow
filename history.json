@@ -1,12 +1,4 @@
 {
-  "03-11-2026": [
-    "AADI.JK",
-    "ASII.JK",
-    "BTPS.JK",
-    "MBAP.JK",
-    "MPMX.JK",
-    "PTBA.JK"
-  ],
   "05-11-2026": [
     "MBAP.JK"
   ],
@@ -16,6 +8,13 @@
     "ASII.JK",
     "BBMD.JK",
     "BREN.JK",
+    "ICBP.JK",
+    "MEGA.JK",
+    "PGAS.JK",
+    "SMRA.JK"
+  ],
+  "10-11-2026": [
+    "AKRA.JK",
     "ICBP.JK",
     "MEGA.JK",
     "PGAS.JK",
