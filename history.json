@@ -1,7 +1,4 @@
 {
-  "05-11-2026": [
-    "MBAP.JK"
-  ],
   "06-11-2026": [
     "ACES.JK",
     "AKRA.JK",
@@ -31,5 +28,19 @@
     "PGAS.JK",
     "RAJA.JK",
     "SMRA.JK"
+  ],
+  "12-11-2026": [
+    "ANTM.JK",
+    "BBSS.JK",
+    "BMRI.JK",
+    "INCO.JK",
+    "KBLV.JK",
+    "KLBF.JK",
+    "KPIG.JK",
+    "MINA.JK",
+    "MYOR.JK",
+    "NCKL.JK",
+    "PADI.JK",
+    "RAJA.JK"
   ]
 }
