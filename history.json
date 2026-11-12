@@ -1,15 +1,4 @@
 {
-  "06-11-2026": [
-    "ACES.JK",
-    "AKRA.JK",
-    "ASII.JK",
-    "BBMD.JK",
-    "BREN.JK",
-    "ICBP.JK",
-    "MEGA.JK",
-    "PGAS.JK",
-    "SMRA.JK"
-  ],
   "10-11-2026": [
     "AKRA.JK",
     "ANTM.JK",
@@ -42,5 +31,17 @@
     "NCKL.JK",
     "PADI.JK",
     "RAJA.JK"
+  ],
+  "13-11-2026": [
+    "BBRI.JK",
+    "BEKS.JK",
+    "BPTR.JK",
+    "CMRY.JK",
+    "DSSA.JK",
+    "INDF.JK",
+    "MYOR.JK",
+    "PSAB.JK",
+    "TBIG.JK",
+    "TLKM.JK"
   ]
 }
