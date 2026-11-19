@@ -1,16 +1,4 @@
 {
-  "13-11-2026": [
-    "BBRI.JK",
-    "BEKS.JK",
-    "BPTR.JK",
-    "CMRY.JK",
-    "DSSA.JK",
-    "INDF.JK",
-    "MYOR.JK",
-    "PSAB.JK",
-    "TBIG.JK",
-    "TLKM.JK"
-  ],
   "14-11-2026": [
     "ACES.JK",
     "ADRO.JK",
@@ -82,5 +70,14 @@
     "SDMU.JK",
     "SIDO.JK",
     "UNVR.JK"
+  ],
+  "20-11-2026": [
+    "ARTO.JK",
+    "BBCA.JK",
+    "CPRO.JK",
+    "ERAA.JK",
+    "EXCL.JK",
+    "HUMI.JK",
+    "PTMP.JK"
   ]
 }
