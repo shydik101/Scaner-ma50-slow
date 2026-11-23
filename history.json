@@ -1,26 +1,4 @@
 {
-  "17-11-2026": [
-    "AGRO.JK",
-    "BBRI.JK",
-    "BMAS.JK",
-    "BNGA.JK",
-    "BPTR.JK",
-    "BSDE.JK",
-    "BTEK.JK",
-    "BULL.JK",
-    "CPRO.JK",
-    "ELTY.JK",
-    "ESSA.JK",
-    "GEMS.JK",
-    "IATA.JK",
-    "MBMA.JK",
-    "MDKA.JK",
-    "NCKL.JK",
-    "NISP.JK",
-    "PACK.JK",
-    "PPRO.JK",
-    "PWON.JK"
-  ],
   "18-11-2026": [
     "AVIA.JK",
     "BBSS.JK",
@@ -63,5 +41,15 @@
     "BBTN.JK",
     "BPTR.JK",
     "SMIL.JK"
+  ],
+  "24-11-2026": [
+    "AVIA.JK",
+    "BREN.JK",
+    "CPRO.JK",
+    "ELSA.JK",
+    "FWCT.JK",
+    "MBMA.JK",
+    "NCKL.JK",
+    "SDMU.JK"
   ]
 }
