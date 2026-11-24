@@ -1,15 +1,4 @@
 {
-  "18-11-2026": [
-    "AVIA.JK",
-    "BBSS.JK",
-    "CITY.JK",
-    "CMRY.JK",
-    "KOCI.JK",
-    "LAND.JK",
-    "MSIN.JK",
-    "PNBN.JK",
-    "TRUE.JK"
-  ],
   "19-11-2026": [
     "ANTM.JK",
     "BBTN.JK",
@@ -51,5 +40,27 @@
     "MBMA.JK",
     "NCKL.JK",
     "SDMU.JK"
+  ],
+  "25-11-2026": [
+    "ARTO.JK",
+    "BBCA.JK",
+    "BIPI.JK",
+    "BJTM.JK",
+    "BKSL.JK",
+    "BULL.JK",
+    "BUMI.JK",
+    "CUAN.JK",
+    "DEWA.JK",
+    "HUMI.JK",
+    "IATA.JK",
+    "ITMG.JK",
+    "KPIG.JK",
+    "NISP.JK",
+    "PACK.JK",
+    "PADI.JK",
+    "PTMP.JK",
+    "PTRO.JK",
+    "TRUE.JK",
+    "WIFI.JK"
   ]
 }
