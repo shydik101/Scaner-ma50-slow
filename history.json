@@ -1,21 +1,4 @@
 {
-  "19-11-2026": [
-    "ANTM.JK",
-    "BBTN.JK",
-    "BGTG.JK",
-    "BIPP.JK",
-    "BJBR.JK",
-    "BMAS.JK",
-    "BSDE.JK",
-    "CHEM.JK",
-    "DMMX.JK",
-    "FILM.JK",
-    "GSMF.JK",
-    "JSMR.JK",
-    "SDMU.JK",
-    "SIDO.JK",
-    "UNVR.JK"
-  ],
   "20-11-2026": [
     "ARTO.JK",
     "BBCA.JK",
@@ -62,5 +45,23 @@
     "PTRO.JK",
     "TRUE.JK",
     "WIFI.JK"
+  ],
+  "26-11-2026": [
+    "AVIA.JK",
+    "BANK.JK",
+    "BBHI.JK",
+    "BBTN.JK",
+    "BMRI.JK",
+    "BNGA.JK",
+    "BPTR.JK",
+    "BSDE.JK",
+    "BYAN.JK",
+    "FWCT.JK",
+    "ISAT.JK",
+    "MSIN.JK",
+    "SAPX.JK",
+    "TBIG.JK",
+    "TLKM.JK",
+    "UNVR.JK"
   ]
 }
