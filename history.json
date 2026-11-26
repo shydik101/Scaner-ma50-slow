@@ -1,13 +1,4 @@
 {
-  "20-11-2026": [
-    "ARTO.JK",
-    "BBCA.JK",
-    "CPRO.JK",
-    "ERAA.JK",
-    "EXCL.JK",
-    "HUMI.JK",
-    "PTMP.JK"
-  ],
   "21-11-2026": [
     "BBSS.JK",
     "BBTN.JK",
@@ -63,5 +54,10 @@
     "TBIG.JK",
     "TLKM.JK",
     "UNVR.JK"
+  ],
+  "27-11-2026": [
+    "CITY.JK",
+    "GSMF.JK",
+    "ITMG.JK"
   ]
 }
