@@ -1,10 +1,4 @@
 {
-  "21-11-2026": [
-    "BBSS.JK",
-    "BBTN.JK",
-    "BPTR.JK",
-    "SMIL.JK"
-  ],
   "24-11-2026": [
     "AVIA.JK",
     "BREN.JK",
@@ -59,5 +53,21 @@
     "CITY.JK",
     "GSMF.JK",
     "ITMG.JK"
+  ],
+  "28-11-2026": [
+    "AADI.JK",
+    "ADRO.JK",
+    "BBTN.JK",
+    "BTEK.JK",
+    "BULL.JK",
+    "BUVA.JK",
+    "DEWA.JK",
+    "IRSX.JK",
+    "MEDC.JK",
+    "NISP.JK",
+    "PNBN.JK",
+    "PTMP.JK",
+    "SRTG.JK",
+    "UNTR.JK"
   ]
 }
